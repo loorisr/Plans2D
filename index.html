@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plans 2D</title>
+<meta name="description" content="Éditeur de plans 2D gratuit dans le navigateur : murs, portes, fenêtres, mobilier, escaliers, plusieurs niveaux, cotes et surfaces. Export SVG, PNG, DXF et PDF.">
+<meta name="theme-color" content="#2563eb">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Plans 2D">
+<meta property="og:description" content="Dessinez vos plans de maison dans le navigateur : murs, ouvertures, mobilier, escaliers, niveaux, cotes. Export SVG, PNG, DXF, PDF.">
+<meta property="og:url" content="https://loorisr.github.io/Plans2D/">
+<meta property="og:image" content="https://loorisr.github.io/Plans2D/screenshot.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cpath d='M7 7h18v18H7zM16 7v7M16 19v6M16 16h9' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
 :root{--bg:#eef0f3;--panel:#fff;--panel2:#f7f8fa;--border:#d8dce2;--text:#1c2230;--muted:#667085;--accent:#2563eb;--accent-soft:#e0eaff;--hover:#eef1f6;--danger:#c62828}
 @media (prefers-color-scheme: dark){:root{--bg:#14161b;--panel:#1d2027;--panel2:#23272f;--border:#323844;--text:#e5e7eb;--muted:#9aa3b2;--accent:#6b9bff;--accent-soft:#25324f;--hover:#2a2f39;--danger:#ff6b6b}}
@@ -18,7 +27,12 @@ button{font:inherit;color:inherit;background:var(--panel2);border:1px solid var(
 button:hover{background:var(--hover)}
 button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 button.danger{color:var(--danger)}
-#tools{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:4px;padding:6px;align-items:center}
+#ghostL{opacity:.28;pointer-events:none}
+#levelSel{max-width:170px}
+.cat{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.cat button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 2px;font-size:11px;line-height:1.15;text-align:center}
+.cat svg{width:100%;height:42px}
+#tools{overflow-y:auto;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:4px;padding:6px;align-items:center}
 #tools button{width:46px;height:46px;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:10px;position:relative}
 #tools button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 #tools button.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
@@ -56,6 +70,7 @@ footer{grid-column:1/-1;display:flex;justify-content:space-between;align-items:c
 <header>
   <span class="brand">Plans 2D</span>
   <input type="text" id="pname" title="Nom du projet">
+  <select id="levelSel" title="Niveau affiché"></select>
   <span class="sep"></span>
   <button data-cmd="new" title="Nouveau plan">Nouveau</button>
   <button data-cmd="open" title="Ouvrir un fichier .json (Ctrl+O)">Ouvrir…</button>
@@ -64,6 +79,7 @@ footer{grid-column:1/-1;display:flex;justify-content:space-between;align-items:c
   <button data-cmd="undo" title="Annuler (Ctrl+Z)">↶</button>
   <button data-cmd="redo" title="Rétablir (Ctrl+Y)">↷</button>
   <button data-cmd="fit" title="Tout afficher (Origine)">Ajuster la vue</button>
+  <button data-cmd="items" id="itemsBtn" title="Afficher / cacher le mobilier et les équipements, à l'écran et dans les exports (Maj+M)">Mobilier visible</button>
   <span class="sep"></span>
   <button data-cmd="svg">SVG</button>
   <button data-cmd="png">PNG</button>
@@ -79,9 +95,11 @@ footer{grid-column:1/-1;display:flex;justify-content:space-between;align-items:c
   <button data-tool="radiator" title="Radiateur (R)"><kbd>R</kbd><svg viewBox="0 0 24 24"><path d="M4 8h16v8H4z"/><path d="M8 8v8M12 8v8M16 8v8"/></svg>Radiat.</button>
   <button data-tool="dim" title="Cote libre (C)"><kbd>C</kbd><svg viewBox="0 0 24 24"><path d="M3 12h18M3 8v8M21 8v8M5 14l2-4M17 14l2-4"/></svg>Cote</button>
   <button data-tool="label" title="Texte / nom de pièce (T)"><kbd>T</kbd><svg viewBox="0 0 24 24"><path d="M5 6h14M12 6v13"/></svg>Texte</button>
+  <button data-tool="furniture" title="Mobilier et équipements (M)"><kbd>M</kbd><svg viewBox="0 0 24 24"><path d="M5 11V7h14v4M3 11h18v6H3zM5 17v2M19 17v2"/></svg>Mobilier</button>
+  <button data-tool="stair" title="Escalier (E)"><kbd>E</kbd><svg viewBox="0 0 24 24"><path d="M3 20h5v-4h4v-4h4V8h5"/></svg>Escalier</button>
 </nav>
 <main id="stage">
-  <svg id="plan" xmlns="http://www.w3.org/2000/svg"><g id="vp"><g id="gridL"></g><g id="worldL"></g><g id="overL"></g></g></svg>
+  <svg id="plan" xmlns="http://www.w3.org/2000/svg"><g id="vp"><g id="gridL"></g><g id="ghostL"></g><g id="worldL"></g><g id="overL"></g></g></svg>
   <div id="lenbox"></div>
   <div id="empty">Plan vide.<br>Prenez l'outil <b>Mur (W)</b> : cliquez les angles, tapez une longueur + <b>Entrée</b>,<br>recliquez le premier point pour fermer la pièce.<br>Ou chargez l'<b>exemple</b> depuis le panneau de droite.</div>
 </main>
@@ -118,20 +136,32 @@ function centroid(pts){let A=0,cx=0,cy=0;for(let i=0;i<pts.length;i++){const a=p
 function defaultSettings(){return {
   wallThickness:20, drawRef:'inner', grid:5, snapGrid:true, ortho:true, snapObjects:true,
   dimsInner:true, dimsOuter:false, dimsOpenings:false, annotateOpenings:true, showAreas:true, textSize:12, units:'cm',
-  printScale:'50', paper:'A4', dxfUnits:'m',
+  printScale:'50', paper:'A4', dxfUnits:'m', printLevels:'cur', ghostLower:true, showItems:true,
   window:{width:100,height:125,sill:90,leaves:2},
   door:{width:83,height:204,leaves:1},
   radiator:{width:80,height:60,depth:10},
 };}
-function newProject(){return {version:1,name:'Mon plan',nodes:[],walls:[],openings:[],dims:[],labels:[],settings:defaultSettings()};}
+// Niveaux : les données du niveau affiché sont à la racine du projet (nodes, walls…),
+// celles des autres niveaux sont rangées dans leur entrée de project.levels.
+const LVL_KEYS=['nodes','walls','openings','dims','labels','items'];
+function newProject(){const lid=uid();return {version:2,name:'Mon plan',nodes:[],walls:[],openings:[],dims:[],labels:[],items:[],levels:[{id:lid,name:'Rez-de-chaussée'}],cur:lid,settings:defaultSettings()};}
 function normalizeProject(p){
   const out=Object.assign(newProject(),p||{});
   const ps=(p&&p.settings)||{};
   out.settings=Object.assign(defaultSettings(),ps);
   for(const k of ['window','door','radiator'])out.settings[k]=Object.assign(defaultSettings()[k],ps[k]||{});
-  for(const k of ['nodes','walls','openings','dims','labels'])if(!Array.isArray(out[k]))out[k]=[];
+  for(const k of LVL_KEYS)if(!Array.isArray(out[k]))out[k]=[];
+  if(!Array.isArray(out.levels)||!out.levels.length){const lid=uid();out.levels=[{id:lid,name:'Rez-de-chaussée'}];out.cur=lid;}
+  if(!out.levels.some(l=>l.id===out.cur)){const free=out.levels.find(l=>!Array.isArray(l.walls))||out.levels[0];out.cur=free.id;}
+  for(const l of out.levels){if(!l.name)l.name='Niveau';
+    if(l.id===out.cur){for(const k of LVL_KEYS)delete l[k];}else for(const k of LVL_KEYS)if(!Array.isArray(l[k]))l[k]=[];}
   return out;
 }
+function curLevel(p=project){return p.levels.find(l=>l.id===p.cur)||p.levels[0];}
+// vue « projet » d'un niveau quelconque (pour le dessin et l'impression)
+function levelProject(p,lv){const src=lv.id===p.cur?p:lv;const o={name:p.name,settings:p.settings};for(const k of LVL_KEYS)o[k]=src[k]||[];return o;}
+function setLevel(p,id){if(id===p.cur)return;const a=curLevel(p),b=p.levels.find(l=>l.id===id);if(!b)return;
+  for(const k of LVL_KEYS){a[k]=p[k];p[k]=b[k]||[];delete b[k];}p.cur=id;}
 let project=newProject();
 function fmtLen(cm){if(project.settings.units==='m')return (cm/100).toFixed(2).replace('.',',');const r=r1(cm);return (Number.isInteger(r)?String(r):r.toFixed(1)).replace('.',',');}
 function fmtArea(cm2){return (cm2/10000).toFixed(2).replace('.',',')+' m²';}
@@ -214,6 +244,9 @@ const STYLE={
   dim:{stroke:'#4a5568',w:0.13}, dimext:{stroke:'#6b7280',w:0.09}, dimtick:{stroke:'#1f2937',w:0.3}, dimtext:{fill:'#1f2937'},
   dimsel:{stroke:'#2563eb',w:0.18}, dimselext:{stroke:'#2563eb',w:0.09}, dimseltick:{stroke:'#2563eb',w:0.3}, dimseltext:{fill:'#1d4ed8',weight:600},
   roomarea:{fill:'#4b5563'}, label:{fill:'#111827',weight:700}, optext:{fill:'#4b5563'},
+  furnfill:{fill:'#ffffff'}, furn:{stroke:'#4b5563',w:0.18}, furnthin:{stroke:'#6b7280',w:0.1},
+  equip:{stroke:'#0e7490',w:0.18}, equipthin:{stroke:'#0e7490',w:0.1}, itemtext:{fill:'#0e7490',weight:600},
+  stair:{stroke:'#1f2937',w:0.22}, stairthin:{stroke:'#374151',w:0.12}, stairarrow:{stroke:'#b45309',w:0.18},
 };
 function buildCSS(mode,den){
   let s='';
@@ -313,7 +346,9 @@ function buildDrawing(p,geo,opt={}){
     if(g.degB===1)out.push({k:'line',a:g.lB,b:g.rB,cls:'wall'});
   }
   for(const st of geo.steps)out.push({k:'line',a:st[0],b:st[1],cls:'wall'});
-  for(const o of p.openings){const g=geo.walls.get(o.wallId);if(g){openingPrims(g,o,out);if(S.annotateOpenings)annotPrims(g,o,out,ts);}}
+  for(const o of p.openings){const g=geo.walls.get(o.wallId);if(g){openingPrims(g,o,out);if(S.annotateOpenings&&!opt.ghost)annotPrims(g,o,out,ts);}}
+  for(const it of p.items||[])if(itemVisible(it,S))itemPrims(it,out);
+  if(opt.ghost)return out;
   // cotes des murs
   const sideDims=(f,off)=>{for(const h of f.hes){
     const g=h.g,side=h.dir==='ab'?'L':'R';const {sr,dirOff}=sideInfo(g,side);
@@ -353,6 +388,7 @@ function primsSVG(prims,withRefs){
   for(const q of prims){
     const c='pl-'+q.cls;
     if(q.k==='poly')s+=`<polygon class="${c}" points="${q.pts.map(p=>f(p.x)+','+f(p.y)).join(' ')}"/>`;
+    else if(q.k==='pline')s+=`<${q.closed?'polygon':'polyline'} class="${c}" points="${q.pts.map(p=>f(p.x)+','+f(p.y)).join(' ')}"/>`;
     else if(q.k==='line')s+=`<line class="${c}" x1="${f(q.a.x)}" y1="${f(q.a.y)}" x2="${f(q.b.x)}" y2="${f(q.b.y)}"/>`;
     else if(q.k==='arc'){const p0={x:q.c.x+q.r*Math.cos(q.a0),y:q.c.y+q.r*Math.sin(q.a0)},p1={x:q.c.x+q.r*Math.cos(q.a1),y:q.c.y+q.r*Math.sin(q.a1)};
       s+=`<path class="${c}" d="M${f(p0.x)} ${f(p0.y)}A${f(q.r)} ${f(q.r)} 0 ${q.a1-q.a0>Math.PI?1:0} 1 ${f(p1.x)} ${f(p1.y)}"/>`;}
@@ -367,8 +403,129 @@ function primsSVG(prims,withRefs){
 function primsBBox(prims){
   let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
   const add=(p,r=0)=>{x0=Math.min(x0,p.x-r);y0=Math.min(y0,p.y-r);x1=Math.max(x1,p.x+r);y1=Math.max(y1,p.y+r);};
-  for(const q of prims){if(q.k==='poly')q.pts.forEach(p=>add(p));else if(q.k==='line'){add(q.a);add(q.b);}else if(q.k==='arc')add(q.c,q.r);else if(q.k==='text')add(q.p,q.size*String(q.s).length*0.32);}
+  for(const q of prims){if(q.k==='poly'||q.k==='pline')q.pts.forEach(p=>add(p));else if(q.k==='line'){add(q.a);add(q.b);}else if(q.k==='arc')add(q.c,q.r);else if(q.k==='text')add(q.p,q.size*String(q.s).length*0.32);}
   return x0===Infinity?null:{x0,y0,x1,y1};
+}
+</script>
+<script>
+'use strict';
+/* ================= mobilier, équipements, escaliers =================
+   Repère local d'un objet : centre (0,0), largeur w sur x, profondeur d sur y.
+   Le dos (contre le mur) est en y = -d/2, la face avant en y = +d/2. */
+const ellPts=(cx,cy,rx,ry,a0=0,a1=2*Math.PI)=>{const n=Math.max(12,Math.ceil(Math.abs(a1-a0)/(Math.PI/18)));const r=[];for(let i=0;i<=n;i++){const a=a0+(a1-a0)*i/n;r.push([cx+rx*Math.cos(a),cy+ry*Math.sin(a)]);}return r;};
+const rrPts=(a,b,c,d,r)=>{r=Math.max(0,Math.min(r,(c-a)/2,(d-b)/2));const out=[];
+  const corner=(cx,cy,s)=>{for(let i=0;i<=4;i++){const t=s+i*Math.PI/8;out.push([cx+r*Math.cos(t),cy+r*Math.sin(t)]);}};
+  corner(c-r,b+r,-Math.PI/2);corner(c-r,d-r,0);corner(a+r,d-r,Math.PI/2);corner(a+r,b+r,Math.PI);return out;};
+function itemFrame(it){const a=(it.rot||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a),fx=it.flip?-1:1;
+  return (x,y)=>({x:it.x+c*x*fx-s*y,y:it.y+s*x*fx+c*y});}
+function itemLocal(it,w){const a=-(it.rot||0)*Math.PI/180,dx=w.x-it.x,dy=w.y-it.y;let x=dx*Math.cos(a)-dy*Math.sin(a);const y=dx*Math.sin(a)+dy*Math.cos(a);if(it.flip)x=-x;return {x,y};}
+// chaise de côté s centrée en (cx,cy), assise tournée vers l'angle ang
+function chairAt(L,cx,cy,ang,s=42){const f=[Math.cos(ang),Math.sin(ang)],sd=[-f[1],f[0]],h=s/2;
+  const pt=(a,b)=>[cx+f[0]*a+sd[0]*b,cy+f[1]*a+sd[1]*b];
+  L.box([pt(-h,-h),pt(-h,h),pt(h,h),pt(h,-h)]);L.line(...pt(-h+7,-h),...pt(-h+7,h));}
+const appliance=t=>(L,W,D)=>{L.rect(-W/2,-D/2,W/2,D/2);L.text(t,0,0,Math.min(W,D)*0.28);};
+const DRAW={
+  bed(L,W,D){const a=W/2,b=D/2;L.rect(-a,-b,a,b);const n=W>=120?2:1,gap=8,pw=(W-gap*(n+1))/n,ph=Math.min(32,D*0.18);
+    for(let i=0;i<n;i++){const x0=-a+gap+i*(pw+gap);L.shape(rrPts(x0,-b+6,x0+pw,-b+6+ph,6));}
+    const y=-b+Math.min(52,D*0.28);L.line(-a,y,a,y);L.line(-a,y+16,a,y+16);const c=Math.min(30,W*0.25);L.line(a-c,b,a,b-c);},
+  sofa(L,W,D){const a=W/2,b=D/2,bk=Math.min(22,D*0.25),arm=Math.min(18,W*0.15);L.rect(-a,-b,a,b);
+    L.line(-a+arm,-b+bk,a-arm,-b+bk);L.line(-a+arm,-b+bk,-a+arm,b);L.line(a-arm,-b+bk,a-arm,b);
+    const n=Math.max(1,Math.round((W-2*arm)/70));for(let i=1;i<n;i++){const x=-a+arm+i*(W-2*arm)/n;L.line(x,-b+bk,x,b-4);}},
+  table(L,W,D,it){const a=W/2,b=D/2;
+    if(it.chairs!==false){const n=Math.max(1,Math.floor(W/60));
+      for(let i=0;i<n;i++){const x=-a+W*(i+0.5)/n;chairAt(L,x,-b-12,Math.PI/2);chairAt(L,x,b+12,-Math.PI/2);}
+      if(D>=80){chairAt(L,-a-12,0,0);chairAt(L,a+12,0,Math.PI);}}
+    L.rect(-a,-b,a,b);},
+  roundTable(L,W,D,it){const a=W/2,b=D/2;
+    if(it.chairs!==false){const n=Math.max(3,Math.round(Math.PI*(W+D)/2/60));
+      for(let i=0;i<n;i++){const t=i*2*Math.PI/n-Math.PI/2;chairAt(L,Math.cos(t)*(a+12),Math.sin(t)*(b+12),t+Math.PI);}}
+    L.box(ellPts(0,0,a,b));},
+  chair(L,W,D){const a=W/2,b=D/2;L.rect(-a,-b,a,b);L.line(-a,-b+Math.min(8,D*0.2),a,-b+Math.min(8,D*0.2));},
+  desk(L,W,D){const a=W/2,b=D/2;L.rect(-a,-b,a,b);L.orect(a-Math.min(40,W*0.35),-b+3,a-3,b-3);},
+  wardrobe(L,W,D){const a=W/2,b=D/2;L.rect(-a,-b,a,b);L.line(-a+4,0,a-4,0);
+    for(let x=-a+12;x<a-6;x+=12)L.line(x-4,-b*0.55,x+4,b*0.55);},
+  dresser(L,W,D){const a=W/2,b=D/2;L.rect(-a,-b,a,b);L.line(-a,b-5,a,b-5);},
+  tv(L,W,D){const a=W/2,b=D/2;L.rect(-a,-b,a,b);L.orect(-W*0.32,-b+4,W*0.32,-b+9);},
+  wc(L,W,D){const a=W/2,b=D/2,tk=Math.min(18,D*0.3);
+    const top=-b+tk,ry=(b-top)/2,c=top+ry;L.rect(-a,-b,a,top);L.box(ellPts(0,c,a-2,ry));L.shape(ellPts(0,c+2,Math.max(2,a-8),Math.max(2,ry-8)));},
+  basin(L,W,D){const a=W/2,b=D/2;L.rect(-a,-b,a,b);const n=W>=100?2:1;
+    for(let i=0;i<n;i++){const cx=-a+W*(i+0.5)/n;L.shape(ellPts(cx,3,Math.max(3,W/n/2-8),Math.max(3,b-8)));L.dot(cx,-b+5,2);}},
+  shower(L,W,D){const a=W/2,b=D/2;L.rect(-a,-b,a,b);L.line(-a,-b,a,b);L.line(a,-b,-a,b);L.dot(0,0,4);},
+  bathtub(L,W,D){const a=W/2,b=D/2;L.rect(-a,-b,a,b);L.shape(rrPts(-a+6,-b+6,a-6,b-6,Math.min(W,D)*0.3));L.dot(-a+18,0,3.5);},
+  counter(L,W,D){L.rect(-W/2,-D/2,W/2,D/2);},
+  ksink(L,W,D){const a=W/2,b=D/2;L.rect(-a,-b,a,b);const n=W>=100?2:1,bw=(W-8*(n+1))/n;
+    for(let i=0;i<n;i++){const x0=-a+8+i*(bw+8);L.shape(rrPts(x0,-b+12,x0+bw,b-8,5));}L.dot(0,-b+6,2);},
+  hob(L,W,D){L.rect(-W/2,-D/2,W/2,D/2);const r=Math.min(W,D)*0.15;for(const sx of [-1,1])for(const sy of [-1,1])L.shape(ellPts(sx*W/4,sy*D/4,r,r));},
+  boiler(L,W,D){L.box(ellPts(0,0,W/2,D/2));L.text('ECS',0,0,Math.min(W,D)*0.24);},
+  stairStraight(L,W,D,it){const a=W/2,b=D/2,n=Math.max(2,it.steps|0);L.rect(-a,-b,a,b);
+    for(let i=1;i<n;i++){const y=b-i*D/n;L.line(-a,y,a,y);}
+    L.dot(0,b-6,2.5,'stairarrow');L.arrow([[0,b-6],[0,-b+6]]);},
+  stairL(L,W,D,it){const a=W/2,b=D/2,fw=clamp(it.flight||90,30,Math.min(W,D)-10),xf=-a+fw,yf=-b+fw,n=Math.max(2,it.steps|0);
+    L.box([[-a,b],[xf,b],[xf,yf],[a,yf],[a,-b],[-a,-b]]);
+    const r1_=D-fw,r2_=W-fw,n1=Math.max(1,Math.round(n*r1_/(r1_+r2_))),n2=Math.max(1,n-n1);
+    for(let i=1;i<=n1;i++){const y=b-i*r1_/n1;L.line(-a,y,xf,y);}
+    for(let i=1;i<n2;i++){const x=xf+i*r2_/n2;L.line(x,-b,x,yf);}
+    L.dot(-a+fw/2,b-6,2.5,'stairarrow');L.arrow([[-a+fw/2,b-6],[-a+fw/2,-b+fw/2],[a-6,-b+fw/2]]);},
+  stairSpiral(L,W,D,it){const R=W/2,core=Math.min(10,R*0.15),n=Math.max(3,it.steps|0),sw=2*Math.PI*0.85,t0=Math.PI/2;
+    L.box(ellPts(0,0,R,R));L.shape(ellPts(0,0,core,core));
+    for(let i=0;i<=n;i++){const t=t0+i*sw/n;L.line(Math.cos(t)*core,Math.sin(t)*core,Math.cos(t)*R,Math.sin(t)*R);}
+    const rr=R*0.62,s=ellPts(0,0,rr,rr,t0+0.12,t0+sw-0.04);L.dot(s[0][0],s[0][1],2.5,'stairarrow');L.arrow(s);},
+};
+const ITEM_CATS={furniture:'Mobilier',equipment:'Cuisine & salle de bain',stairs:'Escaliers'};
+const ITEM_KINDS={
+  bed_double:{cat:'furniture',name:'Lit double',w:140,d:190,wall:true,draw:DRAW.bed},
+  bed_single:{cat:'furniture',name:'Lit simple',w:90,d:190,wall:true,draw:DRAW.bed},
+  sofa:{cat:'furniture',name:'Canapé',w:200,d:90,wall:true,draw:DRAW.sofa},
+  armchair:{cat:'furniture',name:'Fauteuil',w:80,d:80,draw:DRAW.sofa},
+  table:{cat:'furniture',name:'Table',w:160,d:90,chairsAround:true,draw:DRAW.table,extra:{chairs:true}},
+  table_round:{cat:'furniture',name:'Table ronde',w:110,d:110,round:true,chairsAround:true,draw:DRAW.roundTable,extra:{chairs:true}},
+  chair:{cat:'furniture',name:'Chaise',w:45,d:45,draw:DRAW.chair},
+  desk:{cat:'furniture',name:'Bureau',w:120,d:60,wall:true,draw:DRAW.desk},
+  wardrobe:{cat:'furniture',name:'Armoire / placard',w:120,d:60,wall:true,draw:DRAW.wardrobe},
+  dresser:{cat:'furniture',name:'Commode / étagère',w:100,d:45,wall:true,draw:DRAW.dresser},
+  tv:{cat:'furniture',name:'Meuble TV',w:160,d:40,wall:true,draw:DRAW.tv},
+  wc:{cat:'equipment',name:'WC',w:40,d:65,wall:true,draw:DRAW.wc},
+  basin:{cat:'equipment',name:'Lavabo',w:60,d:45,wall:true,draw:DRAW.basin},
+  double_basin:{cat:'equipment',name:'Double vasque',w:120,d:50,wall:true,draw:DRAW.basin},
+  shower:{cat:'equipment',name:'Douche',w:90,d:90,wall:true,draw:DRAW.shower},
+  bathtub:{cat:'equipment',name:'Baignoire',w:170,d:75,wall:true,draw:DRAW.bathtub},
+  counter:{cat:'equipment',name:'Plan de travail',w:240,d:60,wall:true,draw:DRAW.counter},
+  ksink:{cat:'equipment',name:'Évier',w:120,d:60,wall:true,draw:DRAW.ksink},
+  hob:{cat:'equipment',name:'Plaque de cuisson',w:60,d:60,wall:true,draw:DRAW.hob},
+  fridge:{cat:'equipment',name:'Réfrigérateur',w:60,d:65,wall:true,draw:appliance('FR')},
+  dishwasher:{cat:'equipment',name:'Lave-vaisselle',w:60,d:60,wall:true,draw:appliance('LV')},
+  washer:{cat:'equipment',name:'Lave-linge',w:60,d:60,wall:true,draw:appliance('LL')},
+  dryer:{cat:'equipment',name:'Sèche-linge',w:60,d:60,wall:true,draw:appliance('SL')},
+  boiler:{cat:'equipment',name:'Chauffe-eau / chaudière',w:60,d:60,wall:true,round:true,draw:DRAW.boiler},
+  stair_straight:{cat:'stairs',name:'Escalier droit',w:90,d:300,wall:true,draw:DRAW.stairStraight,extra:{steps:15,rise:270}},
+  stair_l:{cat:'stairs',name:'Escalier quart tournant',w:200,d:300,wall:true,draw:DRAW.stairL,extra:{steps:16,rise:270,flight:90}},
+  stair_spiral:{cat:'stairs',name:'Escalier hélicoïdal',w:160,d:160,round:true,draw:DRAW.stairSpiral,extra:{steps:13,rise:270}},
+};
+// « cacher le mobilier » masque mobilier et équipements, pas les escaliers
+function itemVisible(it,S){const K=ITEM_KINDS[it.kind];return S.showItems!==false||(K&&K.cat==='stairs');}
+function newItem(kind){const K=ITEM_KINDS[kind];return Object.assign({id:uid(),kind,x:0,y:0,w:K.w,d:K.d,rot:0},clone(K.extra||{}));}
+function itemBounds(it){const a=it.w/2,b=it.d/2,K=ITEM_KINDS[it.kind];let ex=0,ey=0;
+  if(K&&K.chairsAround&&it.chairs!==false){ey=33;ex=(K.round||it.d>=80)?33:0;}return [-a-ex,-b-ey,a+ex,b+ey];}
+// longueur de la ligne de foulée (pour le giron)
+function stairRun(it){if(it.kind==='stair_l'){const fw=clamp(it.flight||90,30,Math.min(it.w,it.d)-10);return (it.d-fw)+(it.w-fw);}
+  if(it.kind==='stair_spiral')return 2*Math.PI*0.85*it.w/2*0.62;return it.d;}
+function itemPrims(it,out){
+  const K=ITEM_KINDS[it.kind];if(!K)return;
+  const tf=itemFrame(it),rot=(it.rot||0)*Math.PI/180;
+  const M=K.cat==='stairs'?'stair':K.cat==='equipment'?'equip':'furn',TH=M+'thin';
+  const L={
+    box(pts,cl){const P=pts.map(p=>tf(p[0],p[1]));out.push({k:'poly',pts:P,cls:'furnfill'},{k:'pline',pts:P,closed:true,cls:cl||M});},
+    rect(a,b,c,d,cl){L.box([[a,b],[c,b],[c,d],[a,d]],cl);},
+    shape(pts,cl,closed=true){out.push({k:'pline',pts:pts.map(p=>tf(p[0],p[1])),closed,cls:cl||TH});},
+    orect(a,b,c,d,cl){L.shape([[a,b],[c,b],[c,d],[a,d]],cl);},
+    line(a,b,c,d,cl){out.push({k:'line',a:tf(a,b),b:tf(c,d),cls:cl||TH});},
+    dot(x,y,r,cl){L.shape(ellPts(x,y,r,r),cl);},
+    text(s,x,y,size){out.push({k:'text',p:tf(x,y),s,size,ang:readable(rot),cls:'itemtext'});},
+    arrow(pts,cl='stairarrow'){L.shape(pts,cl,false);const p=pts[pts.length-1],q=pts[pts.length-2];
+      let dx=p[0]-q[0],dy=p[1]-q[1];const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
+      for(const sg of [-1,1]){const c=Math.cos(0.45),s=Math.sin(0.45)*sg;L.line(p[0],p[1],p[0]-(dx*c-dy*s)*9,p[1]-(dx*s+dy*c)*9,cl);}},
+  };
+  K.draw(L,it.w,it.d,it);
 }
 </script>
 <script>
@@ -539,14 +696,19 @@ function buildExample(){
   add('door',{x:150,y:460},{x:150,y:300},{width:90});
   add('window',{x:710,y:225},{x:600,y:225},{width:120});
   add('radiator',{x:-10,y:225},{x:100,y:225});
-  p.labels.push({id:uid(),x:200,y:225,text:'Séjour',showArea:true},{id:uid(),x:555,y:225,text:'Cuisine',showArea:true});
+  p.labels.push({id:uid(),x:230,y:110,text:'Séjour',showArea:true},{id:uid(),x:555,y:150,text:'Cuisine',showArea:true});
+  const item=(kind,x,y,rot=0,extra={})=>p.items.push(Object.assign(newItem(kind),{x,y,rot},extra));
+  item('sofa',230,215,0,{w:200});item('table',230,330,0,{w:100,d:50,chairs:false});item('tv',230,430,180);item('armchair',65,300,270);
+  item('counter',525,30);item('hob',455,30);item('ksink',560,30);item('fridge',670,32.5);
+  item('table',555,300,0,{w:120,d:80});
   return p;
 }
 </script>
 <script>
 'use strict';
 /* ================= état, historique, rendu ================= */
-const svg=$('#plan'),vp=$('#vp'),gridL=$('#gridL'),worldL=$('#worldL'),overL=$('#overL');
+const svg=$('#plan'),vp=$('#vp'),gridL=$('#gridL'),ghostL=$('#ghostL'),worldL=$('#worldL'),overL=$('#overL');
+let ghostCache=null;
 const view={tx:0,ty:0,s:1};
 let tool='select',sel=null,hover=null,geoCache=null;
 const T={chain:[],typed:'',snap:null,dim:null,drag:null,pan:null,space:false,mouse:{x:0,y:0},mouseScreen:null,anchor:'auto',lastClick:null};
@@ -557,9 +719,42 @@ function pushHistory(s=snapshot()){undoStack.push(s);if(undoStack.length>300)und
 function change(fn){pushHistory();fn();afterChange();}
 function save(){try{localStorage.setItem(LS_KEY,JSON.stringify(project));}catch(e){}}
 function loadSaved(){try{const s=localStorage.getItem(LS_KEY);if(s)return normalizeProject(JSON.parse(s));}catch(e){}return null;}
-function validateSel(){if(!sel)return;const arr={wall:project.walls,node:project.nodes,opening:project.openings,dim:project.dims,label:project.labels}[sel.type];if(!arr||!byId(arr,sel.id))sel=null;}
+function validateSel(){if(!sel)return;const arr={wall:project.walls,node:project.nodes,opening:project.openings,dim:project.dims,label:project.labels,item:project.items}[sel.type];if(!arr||!byId(arr,sel.id))sel=null;}
 function syncDims(){const geo=computeGeometry(project);for(const d of project.dims){const [a,b]=dimPts(d,geo);d.p1={x:r2(a.x),y:r2(a.y)};d.p2={x:r2(b.x),y:r2(b.y)};}}
-function afterChange(){validateSel();syncDims();save();render();requestAnimationFrame(updatePanel);$('#pname').value=project.name;}
+function updateLevelSel(){
+  $('#levelSel').innerHTML=[...project.levels].reverse().map(l=>`<option value="${l.id}" ${l.id===project.cur?'selected':''}>${esc(l.name)}</option>`).join('')+'<option value="__add">＋ Ajouter un niveau…</option>';
+}
+function afterChange(){validateSel();syncDims();save();ghostCache=null;render();requestAnimationFrame(updatePanel);$('#pname').value=project.name;updateLevelSel();updateItemsBtn();}
+function updateItemsBtn(){const on=project.settings.showItems!==false,b=$('#itemsBtn');b.classList.toggle('on',on);b.textContent=on?'Mobilier visible':'Mobilier caché';}
+// réglage d'affichage : pas d'entrée dans l'historique
+function setShowItems(on){project.settings.showItems=on;if(!on&&sel&&sel.type==='item'&&!itemVisible(byId(project.items,sel.id)||{},project.settings))sel=null;
+  hover=null;save();ghostCache=null;render();updatePanel();updateItemsBtn();}
+/* ---- niveaux ---- */
+function levelIndex(){return project.levels.indexOf(curLevel());}
+function lowerLevel(){const i=levelIndex();return i>0?project.levels[i-1]:null;}
+function switchLevel(id){if(tool==='wall'&&T.chain.length)finishChain(false);T.dim=null;setLevel(project,id);sel=null;hover=null;afterChange();}
+function addLevel(copyWalls){
+  sel=null;
+  change(()=>{const p=project,i=levelIndex(),lv={id:uid(),name:'Étage '+p.levels.length};
+    for(const k of LVL_KEYS)lv[k]=[];
+    if(copyWalls){const map=new Map();lv.nodes=p.nodes.map(n=>{const id=uid();map.set(n.id,id);return {id,x:n.x,y:n.y};});
+      lv.walls=p.walls.map(w=>({id:uid(),a:map.get(w.a),b:map.get(w.b),thickness:w.thickness}));}
+    p.levels.splice(i+1,0,lv);setLevel(p,lv.id);});
+}
+function deleteLevel(){
+  if(project.levels.length<2)return alert('Le plan doit garder au moins un niveau.');
+  if(!confirm(`Supprimer le niveau « ${curLevel().name} » et tout son contenu ? (annulable avec Ctrl+Z)`))return;
+  sel=null;
+  change(()=>{const p=project,i=levelIndex(),dead=curLevel();setLevel(p,p.levels[i>0?i-1:1].id);p.levels=p.levels.filter(l=>l!==dead);});
+}
+function moveLevel(dir){const i=levelIndex(),j=i+dir;if(j<0||j>=project.levels.length)return;
+  change(()=>{const L=project.levels;[L[i],L[j]]=[L[j],L[i]];});}
+function ghostPrims(){
+  if(ghostCache)return ghostCache;
+  const lo=project.settings.ghostLower?lowerLevel():null;let prims=[];
+  if(lo){const lp=levelProject(project,lo);prims=buildDrawing(lp,computeGeometry(lp),{ghost:true});}
+  ghostL.innerHTML=primsSVG(prims,false);return ghostCache=prims;
+}
 function undo(){if(!undoStack.length)return;redoStack.push(snapshot());project=normalizeProject(JSON.parse(undoStack.pop()));afterChange();}
 function redo(){if(!redoStack.length)return;undoStack.push(snapshot());project=normalizeProject(JSON.parse(redoStack.pop()));afterChange();}
 function getGeo(){return geoCache||(geoCache=computeGeometry(project));}
@@ -568,8 +763,9 @@ function render(opts={}){
   geoCache=null;
   const p=opts.project||project,geo=opts.project?computeGeometry(p):getGeo();
   const selOp=opts.selOpening!==undefined?opts.selOpening:(sel&&sel.type==='opening'?sel.id:null);
+  const ghost=ghostPrims();
   worldL.innerHTML=primsSVG(buildDrawing(p,geo,{selOpening:selOp}),true);
-  $('#empty').style.display=(!p.walls.length&&!p.labels.length&&!T.chain.length)?'block':'none';
+  $('#empty').style.display=(!p.walls.length&&!p.labels.length&&!p.items.length&&!T.chain.length&&!ghost.length)?'block':'none';
   renderOverlay();
 }
 function applyView(){vp.setAttribute('transform',`translate(${view.tx} ${view.ty}) scale(${view.s})`);renderGrid();renderOverlay();}
@@ -588,7 +784,7 @@ function renderGrid(){
 }
 function fitView(){
   const r=svg.getBoundingClientRect();
-  const bb=primsBBox(buildDrawing(project,getGeo(),{}))||{x0:-100,y0:-100,x1:900,y1:600};
+  const bb=primsBBox([...buildDrawing(project,getGeo(),{}),...ghostPrims()])||{x0:-100,y0:-100,x1:900,y1:600};
   const m=50,bw=Math.max(bb.x1-bb.x0,100),bh=Math.max(bb.y1-bb.y0,100);
   view.s=clamp(Math.min((r.width-2*m)/bw,(r.height-2*m)/bh),0.02,40);
   view.tx=r.width/2-(bb.x0+bb.x1)/2*view.s;view.ty=r.height/2-(bb.y0+bb.y1)/2*view.s;applyView();
@@ -613,6 +809,8 @@ function renderOverlay(){
       return `<polygon points="${ptsAttr(openingHitPoly(g,o,2*px))}" fill="${fill}" ${st(strong?2:1.2)}/>`+(strong?wallTags(g):'');}
     if(it.type==='label'){const l=byId(project.labels,it.id);if(!l)return '';const ts=project.settings.textSize,w=Math.max(4,l.text.length)*ts*0.42;
       return `<rect x="${l.x-w}" y="${l.y-ts}" width="${2*w}" height="${ts*3}" fill="${fill}" ${st(1.5)}/>`;}
+    if(it.type==='item'){const o=byId(project.items,it.id);if(!o)return '';const [x0,y0,x1,y1]=itemBounds(o),tf=itemFrame(o);
+      return `<polygon points="${ptsAttr([tf(x0,y0),tf(x1,y0),tf(x1,y1),tf(x0,y1)])}" fill="${fill}" ${st(strong?2:1.2)}/>`;}
     if(it.type==='dim'){const d=byId(project.dims,it.id);if(!d)return '';const nn=V.perp(V.norm(V.sub(d.p2,d.p1)));const q1=V.add(d.p1,V.mul(nn,d.offset)),q2=V.add(d.p2,V.mul(nn,d.offset));
       return `<line x1="${q1.x}" y1="${q1.y}" x2="${q2.x}" y2="${q2.y}" ${st(4)} opacity=".35"/>`;}
     return '';
@@ -703,6 +901,8 @@ function hitTest(w){
   for(const d of p.dims){const nn=V.perp(V.norm(V.sub(d.p2,d.p1)));const q1=V.add(d.p1,V.mul(nn,d.offset)),q2=V.add(d.p2,V.mul(nn,d.offset));
     if(V.dist(projOnSeg(w,q1,q2).p,w)<Math.max(tol,ts*0.8))return {type:'dim',id:d.id};}
   for(const n of p.nodes)if(V.dist(n,w)<tol*1.4&&p.walls.some(x=>x.a===n.id||x.b===n.id))return {type:'node',id:n.id};
+  for(const it of [...p.items].reverse()){if(!itemVisible(it,p.settings))continue;const q=itemLocal(it,w),[x0,y0,x1,y1]=itemBounds(it);
+    if(q.x>=x0-tol&&q.x<=x1+tol&&q.y>=y0-tol&&q.y<=y1+tol)return {type:'item',id:it.id};}
   for(const g of geo.walls.values())if(pointInPoly(w,g.poly))return {type:'wall',id:g.w.id};
   const wu=wallUnder(w,tol);if(wu)return {type:'wall',id:wu.g.w.id};
   return null;
@@ -719,13 +919,36 @@ const HINTS={
   radiator:'Survolez un mur et cliquez pour poser le radiateur, du côté de la souris',
   dim:'Clic : 1er point · Clic : 2e point · Clic : position de la cote · Échap : annuler',
   label:'Clic : placer un texte (nom de pièce — la surface s\'affiche dessous)',
+  furniture:'Choisissez un modèle à droite puis cliquez pour le poser · Près d\'un mur, l\'objet s\'y adosse (Maj : pose libre) · R : pivoter de 90° (Maj+R : 15°)',
+  stair:'Choisissez un escalier à droite puis cliquez pour le poser · La flèche indique la montée · R : pivoter de 90° (Maj+R : 15°) · Maj : pose libre',
 };
+// position d'un objet : adossé au mur le plus proche si possible, sinon sur la grille
+function snapItem(it,c,free){
+  const K=ITEM_KINDS[it.kind],S=project.settings;
+  if(!free&&K&&K.wall&&S.snapObjects){
+    let best=null;
+    for(const g of getGeo().walls.values())for(const sg of [1,-1]){
+      const k=V.dot(V.sub(c,g.A),g.n)*sg-g.t/2;if(k<-g.t/2||k>it.d+30)continue;
+      const s=V.dot(V.sub(c,g.A),g.d),sr=sg>0?g.sL:g.sR;if(s<sr[0]-10||s>sr[1]+10)continue;
+      const score=Math.abs(k-it.d/2);if(!best||score<best.score)best={g,sg,s,sr,score};
+    }
+    if(best){const {g,sg,sr}=best,hw=it.w/2;let s=best.s;
+      if(Math.abs(s-hw-sr[0])<15)s=sr[0]+hw;else if(Math.abs(sr[1]-s-hw)<15)s=sr[1]-hw;else if(S.snapGrid)s=Math.round(s/S.grid)*S.grid;
+      const nrm=V.mul(g.n,sg),pos=V.add(V.add(g.A,V.mul(g.d,s)),V.mul(nrm,g.t/2+it.d/2));
+      const rot=Math.round(Math.atan2(-nrm.x,nrm.y)*180/Math.PI);
+      return {x:r1(pos.x),y:r1(pos.y),rot:((rot%360)+360)%360};}
+  }
+  let x=c.x,y=c.y;if(S.snapGrid&&!free){x=Math.round(x/S.grid)*S.grid;y=Math.round(y/S.grid)*S.grid;}
+  return {x:r1(x),y:r1(y)};
+}
+function rotateItem(it,deg){if(it)change(()=>{it.rot=((r1(it.rot+deg)%360)+360)%360;});}
 function startDrag(h,w){
   const d={type:h.type,id:h.id,start:w,snap:snapshot(),moved:false},p=project,geo=getGeo();
   if(h.type==='node'){const n=byId(p.nodes,h.id);d.orig={x:n.x,y:n.y};}
   else if(h.type==='wall'){const g=geo.walls.get(h.id);if(!g)return null;d.n=g.n;d.ids=[...collinearChain(p,h.id)];d.orig=d.ids.map(id=>{const n=byId(p.nodes,id);return {x:n.x,y:n.y};});}
   else if(h.type==='opening'){const o=byId(p.openings,h.id),g=geo.walls.get(o.wallId);d.grab=V.dot(V.sub(w,g.A),g.d)-openingSpan(g,o)[0];}
   else if(h.type==='label'){const l=byId(p.labels,h.id);d.orig={x:l.x,y:l.y};}
+  else if(h.type==='item'){const it=byId(p.items,h.id);d.orig={x:it.x,y:it.y,rot:it.rot};}
   return d;
 }
 function dragApply(d,w,e){
@@ -738,6 +961,8 @@ function dragApply(d,w,e){
     const g=getGeo().walls.get(o.wallId);if(!g)return;const [a,b]=openingRange(g,o);
     o.offset=clamp(Math.round(V.dot(V.sub(w,g.A),g.d)-d.grab),a,Math.max(a,b-o.width));}
   else if(d.type==='label'){const l=byId(p.labels,d.id);l.x=r2(d.orig.x+w.x-d.start.x);l.y=r2(d.orig.y+w.y-d.start.y);}
+  else if(d.type==='item'){const it=byId(p.items,d.id);it.rot=d.orig.rot;
+    const sp=snapItem(it,{x:d.orig.x+w.x-d.start.x,y:d.orig.y+w.y-d.start.y},e.shiftKey);it.x=sp.x;it.y=sp.y;if(sp.rot!=null)it.rot=sp.rot;}
   else if(d.type==='dim'){const dm=byId(p.dims,d.id);dm.offset=r1(V.dot(V.sub(w,dm.p1),V.perp(V.norm(V.sub(dm.p2,dm.p1)))));}
 }
 function inlineEdit(wpt,value,onOk){
@@ -768,13 +993,13 @@ function nudge(dx,dy,st){
   if(sel.type==='opening'){const o=byId(p.openings,sel.id),g=geo.walls.get(o.wallId);if(!g)return;const a=V.dot(v,g.d)/st;if(Math.abs(a)<0.3)return;
     const [r0,rb]=openingRange(g,o);o.offset=clamp(r1(openingSpan(g,o)[0]+Math.sign(a)*st),r0,Math.max(r0,rb-o.width));}
   else if(sel.type==='wall'){const g=geo.walls.get(sel.id);if(!g)return;const a=V.dot(v,g.n)/st;if(Math.abs(a)<0.3)return;shiftWall(p,sel.id,Math.sign(a)*st);}
-  else if(sel.type==='node'||sel.type==='label'){const o=byId(sel.type==='node'?p.nodes:p.labels,sel.id);o.x=r2(o.x+dx);o.y=r2(o.y+dy);}
+  else if(sel.type==='node'||sel.type==='label'||sel.type==='item'){const o=byId({node:p.nodes,label:p.labels,item:p.items}[sel.type],sel.id);o.x=r2(o.x+dx);o.y=r2(o.y+dy);}
   else if(sel.type==='dim'){const d=byId(p.dims,sel.id);delete d.p1ref;delete d.p2ref;d.p1=V.add(d.p1,v);d.p2=V.add(d.p2,v);}
   if(!coalesce)pushHistory(before);T.nudge={key,t:now};afterChange();
 }
 function copySel(){
-  if(!sel||!['opening','label','dim'].includes(sel.type))return false;
-  const arr={opening:project.openings,label:project.labels,dim:project.dims}[sel.type];T.clip={type:sel.type,data:clone(byId(arr,sel.id))};return true;
+  if(!sel||!['opening','label','dim','item'].includes(sel.type))return false;
+  const arr={opening:project.openings,label:project.labels,dim:project.dims,item:project.items}[sel.type];T.clip={type:sel.type,data:clone(byId(arr,sel.id))};return true;
 }
 function pasteClip(atMouse){
   const c=T.clip;if(!c)return;const o=clone(c.data);o.id=uid();const geo=getGeo();
@@ -783,7 +1008,7 @@ function pasteClip(atMouse){
     if(hw){o.wallId=hw.g.w.id;o.offset=r1(hw.s-o.width/2);o.side=hw.k>=0?1:-1;}else o.offset=r1(o.offset+o.width+10);
     const g=geo.walls.get(o.wallId);if(!g)return;const [a,b]=openingRange(g,o);o.offset=clamp(o.offset,a,Math.max(a,b-o.width));
     change(()=>project.openings.push(o));
-  }else if(c.type==='label'){if(atMouse){o.x=r1(T.mouse.x);o.y=r1(T.mouse.y);}else{o.x+=50;o.y+=50;}change(()=>project.labels.push(o));}
+  }else if(c.type==='label'||c.type==='item'){if(atMouse){o.x=r1(T.mouse.x);o.y=r1(T.mouse.y);}else{o.x+=50;o.y+=50;}change(()=>project[c.type==='label'?'labels':'items'].push(o));}
   else{delete o.p1ref;delete o.p2ref;const dv=atMouse?V.sub(T.mouse,o.p1):{x:50,y:50};o.p1=V.add(o.p1,dv);o.p2=V.add(o.p2,dv);change(()=>project.dims.push(o));}
   T.clip.data=clone(o);sel={type:c.type,id:o.id};render();updatePanel();
 }
@@ -815,7 +1040,7 @@ const SelectTool={
       d.moved=true;dragApply(d,w,e);render();return;
     }
     const h=hitTest(w);if(!sameItem(h,hover)){hover=h;renderOverlay();}
-    svg.style.cursor=h?(h.type==='wall'?'move':'pointer'):'default';
+    svg.style.cursor=h?((h.type==='wall'||h.type==='item')?'move':'pointer'):'default';
   },
   up(){const d=T.drag;T.drag=null;T.snap=null;if(d&&d.moved&&d.type!=='pan'){if(d.type==='node')postMove([d.id]);else if(d.type==='wall')postMove(d.ids);pushHistory(d.snap);afterChange();}else renderOverlay();}
 };
@@ -898,13 +1123,20 @@ const DimTool={
   }
 };
 const LabelTool={down(w){inlineEdit(w,'',t=>{t=t.trim();if(!t)return;const l={id:uid(),x:r1(w.x),y:r1(w.y),text:t,showArea:true};change(()=>project.labels.push(l));sel={type:'label',id:l.id};render();updatePanel();});},move(){}};
-const TOOLS={select:SelectTool,wall:WallTool,window:OpeningTool('window'),door:OpeningTool('door'),radiator:OpeningTool('radiator'),dim:DimTool,label:LabelTool};
+T.kinds={furniture:'bed_double',stair:'stair_straight'};T.itemRot=0;
+const ItemTool=name=>({
+  place(w,e){const it=newItem(T.kinds[name]);it.rot=T.itemRot;const sp=snapItem(it,w,e&&e.shiftKey);it.x=sp.x;it.y=sp.y;if(sp.rot!=null)it.rot=sp.rot;return it;},
+  move(w,e){const tmp=clone(project);tmp.items.push(this.place(w,e));render({project:tmp});},
+  down(w,e){const it=this.place(w,e);change(()=>project.items.push(it));sel={type:'item',id:it.id};render();},
+});
+const TOOLS={select:SelectTool,wall:WallTool,window:OpeningTool('window'),door:OpeningTool('door'),radiator:OpeningTool('radiator'),dim:DimTool,label:LabelTool,furniture:ItemTool('furniture'),stair:ItemTool('stair')};
 function setTool(name){
   if(tool==='wall'&&T.chain.length)finishChain(false);
   tool=name;T.dim=null;T.snap=null;hover=null;T.refOverride=null;
+  if(name==='furniture'&&project.settings.showItems===false)setShowItems(true);
   document.querySelectorAll('#tools button').forEach(b=>b.classList.toggle('active',b.dataset.tool===name));
   $('#hint').textContent=HINTS[name]+(name==='wall'?' · Réf. : '+refLabel():'');svg.style.cursor=name==='select'?'default':'crosshair';
-  render();updateLenBox();
+  render();updateLenBox();updatePanel();
 }
 function deleteSelection(){
   if(!sel)return;const s=sel;sel=null;
@@ -912,7 +1144,8 @@ function deleteSelection(){
     if(s.type==='node')removeNode(p,s.id);else if(s.type==='wall')removeWall(p,s.id);
     else if(s.type==='opening')p.openings=p.openings.filter(o=>o.id!==s.id);
     else if(s.type==='dim')p.dims=p.dims.filter(o=>o.id!==s.id);
-    else if(s.type==='label')p.labels=p.labels.filter(o=>o.id!==s.id);});
+    else if(s.type==='label')p.labels=p.labels.filter(o=>o.id!==s.id);
+    else if(s.type==='item')p.items=p.items.filter(o=>o.id!==s.id);});
 }
 function flipOpening(field){
   if(!sel||sel.type!=='opening')return;
@@ -964,7 +1197,12 @@ document.addEventListener('keydown',e=>{
   const l=k.toLowerCase();
   if(l==='x'&&sel&&sel.type==='opening'){flipOpening('side');return;}
   if(l==='h'&&sel&&sel.type==='opening'){flipOpening('hinge');return;}
-  const map={v:'select',w:'wall',m:'wall',f:'window',d:'door',p:'door',r:'radiator',c:'dim',t:'label'};
+  const placing=tool==='furniture'||tool==='stair',selItem=sel&&sel.type==='item'&&tool==='select';
+  if(l==='r'&&!e.altKey&&(placing||selItem)){const dg=e.shiftKey?15:90;
+    if(selItem)rotateItem(byId(project.items,sel.id),dg);else{T.itemRot=(T.itemRot+dg)%360;TOOLS[tool].move(T.mouse,{});}return;}
+  if(l==='x'&&sel&&sel.type==='item'){change(()=>{const it=byId(project.items,sel.id);it.flip=!it.flip;});return;}
+  const map={v:'select',w:'wall',f:'window',d:'door',p:'door',r:'radiator',c:'dim',t:'label',m:'furniture',e:'stair'};
+  if(l==='m'&&e.shiftKey){setShowItems(project.settings.showItems===false);return;}
   if(map[l]&&!e.altKey)setTool(map[l]);
 });
 document.addEventListener('keyup',e=>{if(e.key===' '){T.space=false;svg.style.cursor=tool==='select'?'default':'crosshair';}});
@@ -983,23 +1221,29 @@ const TYPE_NAMES={window:'Fenêtre',door:'Porte',radiator:'Radiateur'};
 
 function settingsHTML(){
   const S=project.settings;
+  const lv=curLevel(),i=levelIndex(),n=project.levels.length;
   return `<h2>Réglages du plan</h2><p class="hint">Rien n'est sélectionné. Choisissez un outil à gauche ou cliquez un élément du plan.</p>
+  <h3>Niveau affiché (${i+1}/${n})</h3><div class="row"><input type="text" data-k="lv.name" value="${esc(lv.name)}" style="flex:1;width:auto;text-align:left" title="Nom du niveau"></div>
+  <div class="chips"><button data-act="lvAdd">+ Niveau vide</button><button data-act="lvCopy">+ Niveau (copie des murs)</button>
+  ${n>1?`<button data-act="lvUp" ${i===n-1?'disabled':''}>Monter ▲</button><button data-act="lvDown" ${i===0?'disabled':''}>Descendre ▼</button><button data-act="lvDel" class="danger">Supprimer le niveau</button>`:''}</div>
+  ${chk('s.ghostLower',S.ghostLower,'Voir le niveau inférieur en transparence')}
+  <p class="hint">Le nouveau niveau est placé au-dessus du niveau affiché. Changez de niveau avec la liste en haut.</p>
   <h3>Murs</h3>${row('Épaisseur par défaut',inp('s.wallThickness',S.wallThickness))}${thickChips('defThick',S.wallThickness)}
   ${row('Ligne de tracé',selBox('s.drawRef',S.drawRef,[['inner','Face intérieure'],['axis','Axe du mur'],['outer','Face extérieure']]))}
   <p class="hint">« Face intérieure » : les longueurs tapées sont les cotes intérieures de la pièce (contour de pièce). Un mur droit isolé est toujours tracé sur son axe.</p>
   <h3>Accroches</h3>${chk('s.snapGrid',S.snapGrid,'Grille')}${row('Pas de la grille',inp('s.grid',S.grid))}
   ${chk('s.ortho',S.ortho,'Angles 45° / 90° (Maj = libre)')}${chk('s.snapObjects',S.snapObjects,'Nœuds, angles, faces et alignements')}
   <h3>Cotes et textes</h3>${chk('s.dimsInner',S.dimsInner,'Cotes intérieures des pièces')}${chk('s.dimsOuter',S.dimsOuter,'Cotes extérieures')}
-  ${chk('s.dimsOpenings',S.dimsOpenings,'Cotes des ouvertures')}${chk('s.annotateOpenings',S.annotateOpenings,'Annoter fenêtres / portes (l×h, allège)')}${chk('s.showAreas',S.showAreas,'Surfaces des pièces')}
+  ${chk('s.dimsOpenings',S.dimsOpenings,'Cotes des ouvertures')}${chk('s.annotateOpenings',S.annotateOpenings,'Annoter fenêtres / portes (l×h, allège)')}${chk('s.showAreas',S.showAreas,'Surfaces des pièces')}${chk('s.showItems',S.showItems,'Mobilier et équipements (Maj+M)')}
   ${row('Taille du texte',inp('s.textSize',S.textSize))}${row('Unité affichée',selBox('s.units',S.units,[['cm','centimètres'],['m','mètres']]))}
   <h3>Dimensions par défaut</h3>
   ${row('Fenêtre : largeur',inp('s.window.width',S.window.width))}${row('Fenêtre : hauteur',inp('s.window.height',S.window.height))}${row('Fenêtre : allège',inp('s.window.sill',S.window.sill))}
   ${row('Porte : largeur',inp('s.door.width',S.door.width))}${row('Porte : hauteur',inp('s.door.height',S.door.height))}
   ${row('Radiateur : largeur',inp('s.radiator.width',S.radiator.width))}${row('Radiateur : hauteur',inp('s.radiator.height',S.radiator.height))}${row('Radiateur : épaisseur',inp('s.radiator.depth',S.radiator.depth))}
   <h3>Impression / export</h3>${row('Échelle',selBox('s.printScale',S.printScale,[['50','1:50'],['100','1:100'],['fit','Ajuster à la page']]))}
-  ${row('Format',selBox('s.paper',S.paper,[['A4','A4'],['A3','A3']]))}${row('Unité du DXF',selBox('s.dxfUnits',S.dxfUnits,[['m','mètres'],['cm','centimètres']]))}
+  ${row('Format',selBox('s.paper',S.paper,[['A4','A4'],['A3','A3']]))}${n>1?row('Niveaux imprimés',selBox('s.printLevels',S.printLevels,[['cur','Niveau affiché'],['all','Tous (1 page chacun)']])):''}${row('Unité du DXF',selBox('s.dxfUnits',S.dxfUnits,[['m','mètres'],['cm','centimètres']]))}
   <h3>Plan</h3><div class="chips"><button data-act="example">Charger l'exemple</button><button data-act="new" class="danger">Nouveau plan</button></div>
-  <h3>Raccourcis</h3><div class="keys"><b>V W F D R C T</b><span>outils</span><b>Entrée</b><span>valider une longueur / finir</span><b>Retour arr.</b><span>retirer le dernier point</span>
+  <h3>Raccourcis</h3><div class="keys"><b>V W F D R C T M E</b><span>outils</span><b>R / Maj+R (objet)</b><span>pivoter 90° / 15°</span><b>X (objet)</b><span>symétrie</span><b>Entrée</b><span>valider une longueur / finir</span><b>Retour arr.</b><span>retirer le dernier point</span>
   <b>Maj</b><span>angle libre / sans grille</span><b>Molette</b><span>zoom</span><b>Espace + glisser</b><span>déplacer la vue</span><b>Origine</b><span>tout afficher</span>
   <b>X / H</b><span>inverser sens / charnière</span><b>Flèches</b><span>décaler de 1 cm (Maj : 10 cm)</span><b>Ctrl+C / V / D</b><span>copier / coller / dupliquer</span><b>Tab (mur)</b><span>côté du mur / axe</span><b>420&lt;30</b><span>longueur &lt; angle</span><b>Suppr</b><span>effacer</span><b>Ctrl+Z / Y</b><span>annuler / rétablir</span><b>Double-clic cote</b><span>modifier la longueur</span></div>
   <p class="hint">Le plan est enregistré automatiquement dans ce navigateur. Utilisez « Enregistrer » pour garder un fichier .json.</p>`;
@@ -1038,9 +1282,48 @@ function openingHTML(o){
   <p class="hint">Glissez l'élément sur le plan pour le déplacer le long du mur (ou vers un autre mur).</p>`;
   return h;
 }
+const thumbCache=new Map();
+function itemThumb(kind){
+  if(thumbCache.has(kind))return thumbCache.get(kind);
+  const out=[];itemPrims(newItem(kind),out);const bb=primsBBox(out),m=6;
+  const s=`<svg viewBox="${r1(bb.x0-m)} ${r1(bb.y0-m)} ${r1(bb.x1-bb.x0+2*m)} ${r1(bb.y1-bb.y0+2*m)}">${primsSVG(out,false)}</svg>`;
+  thumbCache.set(kind,s);return s;
+}
+function catalogHTML(t){
+  const cats=t==='stair'?['stairs']:['furniture','equipment'];
+  let h=`<h2>${t==='stair'?'Escaliers':'Mobilier & équipements'}</h2><p class="hint">Choisissez un modèle puis cliquez sur le plan. Près d'un mur, l'objet s'y adosse (Maj : pose libre). R : pivoter.</p>`;
+  for(const c of cats){h+=`<h3>${ITEM_CATS[c]}</h3><div class="cat">`;
+    for(const [k,K] of Object.entries(ITEM_KINDS))if(K.cat===c)h+=`<button data-act="pick" data-v="${k}" class="${T.kinds[t]===k?'on':''}" title="${esc(K.name)}">${itemThumb(k)}<span>${esc(K.name)}</span></button>`;
+    h+='</div>';}
+  return h;
+}
+function itemHTML(it){
+  const K=ITEM_KINDS[it.kind]||{name:'Objet',cat:'furniture'},st=K.cat==='stairs';
+  const group=st?['stairs']:['furniture','equipment'];
+  const opts=Object.entries(ITEM_KINDS).filter(([,x])=>group.includes(x.cat)).map(([k,x])=>[k,x.name]);
+  let h=`<h2>${esc(K.name)}</h2>${row('Modèle',selBox('i.kind',it.kind,opts))}`;
+  if(it.kind==='stair_spiral')h+=row('Diamètre',inp('i.w',it.w));
+  else h+=row('Largeur',inp('i.w',it.w))+row(st?'Longueur':'Profondeur',inp('i.d',it.d));
+  h+=row('Rotation',inp('i.rot',it.rot,'°'))+`<div class="chips"><button data-act="rot" data-v="-90">⟲ 90°</button><button data-act="rot" data-v="90">⟳ 90°</button><button data-act="mirror">Symétrie (X)</button></div>`;
+  if(K.chairsAround)h+=chk('i.chairs',it.chairs!==false,'Chaises autour');
+  if(st){
+    h+=`<h3>Marches</h3>${row('Nombre de marches',inp('i.steps',it.steps,''))}`;
+    if(it.kind==='stair_l')h+=row('Largeur de volée',inp('i.flight',it.flight));
+    h+=row('Hauteur à monter',inp('i.rise',it.rise));
+    const g=stairRun(it)/it.steps,hh=it.rise/it.steps,bl=2*hh+g;
+    h+=`<p class="hint">Hauteur de marche ${fnum(hh)} cm · giron ${fnum(g)} cm · 2h+g = ${fnum(bl)} cm ${bl>=60&&bl<=65&&hh<=20?'✓ confortable':'(conseillé : 2h+g entre 60 et 65 cm, h ≤ 20 cm)'}</p>`;
+  }
+  h+=`<h3>Position</h3>${row('X',inp('i.x',it.x))}${row('Y',inp('i.y',it.y))}
+  <div class="chips" style="margin-top:12px"><button data-act="dupItem">Dupliquer</button><button data-act="delete" class="danger">Supprimer</button></div>
+  <p class="hint">Glissez l'objet pour le déplacer : près d'un mur, il s'y adosse (Maj : libre). R : pivoter · X : symétrie · Ctrl+C / V : copier vers un autre niveau.</p>`;
+  return h;
+}
 function panelHTML(){
+  let pre='';
+  if(tool==='furniture'||tool==='stair'){pre=catalogHTML(tool);if(!sel||sel.type!=='item')return pre;}
   if(!sel)return settingsHTML();
   const p=project;
+  if(sel.type==='item'){const it=byId(p.items,sel.id);return pre+(it?itemHTML(it):'');}
   if(sel.type==='wall'){const w=byId(p.walls,sel.id);return w?wallHTML(w):'';}
   if(sel.type==='opening'){const o=byId(p.openings,sel.id);return o?openingHTML(o):'';}
   if(sel.type==='node'){const n=byId(p.nodes,sel.id);if(!n)return '';const cnt=p.walls.filter(w=>w.a===n.id||w.b===n.id).length;
@@ -1068,7 +1351,16 @@ function onField(el){
   if(scope==='s'){const S=project.settings,cur=getPath(S,key);
     let v=raw;if(typeof cur==='number'){if(!isFinite(num)||num<=0)return bad();v=num;}else if(typeof cur==='boolean')v=!!raw;
     change(()=>setPath(S,key,v));if(key==='grid')renderGrid();return;}
+  if(scope==='lv'){const v=String(raw).trim();if(v)change(()=>{curLevel().name=v;});else bad();return;}
   if(!sel)return;
+  if(scope==='i'){const it=byId(project.items,sel.id);if(!it)return;
+    if(key==='kind'){const K=ITEM_KINDS[raw];if(K)change(()=>{Object.assign(it,{kind:raw,w:K.w,d:K.d},clone(K.extra||{}));});return;}
+    if(key==='chairs'){change(()=>{it.chairs=!!raw;});return;}
+    if(!isFinite(num))return bad();
+    if(key==='rot'){change(()=>{it.rot=((r1(num)%360)+360)%360;});return;}
+    if(key==='x'||key==='y'){change(()=>{it[key]=r1(num);});return;}
+    if(num<=0)return bad();
+    change(()=>{it[key]=key==='steps'?Math.max(2,Math.round(num)):r1(num);if(it.kind==='stair_spiral'&&key==='w')it.d=it.w;});return;}
   if(scope==='w'){const w=byId(project.walls,sel.id);if(!w)return;
     if(!isFinite(num))return bad();
     if(key==='thickness'){if(num>0)change(()=>{w.thickness=num;});else bad();}
@@ -1099,7 +1391,14 @@ function onAct(b){
   if(a==='flip'){flipOpening(v);return;}
   if(a==='selOp'){sel={type:'opening',id:v};updatePanel();render();return;}
   if(a==='selWall'){sel={type:'wall',id:v};updatePanel();render();return;}
+  if(a==='pick'){T.kinds[tool==='stair'?'stair':'furniture']=v;if(sel&&sel.type==='item')sel=null;updatePanel();render();return;}
+  if(a==='lvAdd'||a==='lvCopy'){addLevel(a==='lvCopy');return;}
+  if(a==='lvDel'){deleteLevel();return;}
+  if(a==='lvUp'||a==='lvDown'){moveLevel(a==='lvUp'?1:-1);return;}
   if(!sel)return;
+  if(sel.type==='item'){const it=byId(project.items,sel.id);if(!it)return;
+    if(a==='rot')rotateItem(it,+v);else if(a==='mirror')change(()=>{it.flip=!it.flip;});else if(a==='dupItem'){copySel();pasteClip(false);}
+    return;}
   if(sel.type==='wall'){const w=byId(project.walls,sel.id);if(!w)return;
     if(a==='thick')change(()=>{w.thickness=+v;});
     else if(a==='reverse')change(()=>reverseWall(project,w));
@@ -1117,7 +1416,8 @@ $('#props').addEventListener('click',e=>{const b=e.target.closest('button[data-a
 <script>
 'use strict';
 /* ================= fichiers & exports ================= */
-function slug(){return (project.name||'plan').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'plan';}
+function slug(s=project.name){return (s||'plan').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'plan';}
+function fileBase(){return slug()+(project.levels.length>1?'-'+slug(curLevel().name):'');}
 function download(name,data,mime){const blob=data instanceof Blob?data:new Blob([data],{type:mime});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
 function saveJSON(){download(slug()+'.json',JSON.stringify(project,null,1),'application/json');}
 function newPlan(){if(!confirm('Effacer le plan actuel ? (annulable avec Ctrl+Z)'))return;pushHistory();const S=project.settings;project=newProject();project.settings=S;sel=null;afterChange();fitView();}
@@ -1127,32 +1427,36 @@ $('#fileIn').addEventListener('change',e=>{
     catch(err){alert('Fichier non reconnu : '+err.message);}};
   rd.readAsText(f);e.target.value='';
 });
-function exportSVGString(den){
-  const prims=buildDrawing(project,computeGeometry(project),{});const bb=primsBBox(prims);if(!bb)return null;
-  const m=Math.max(30,project.settings.textSize*2),x=bb.x0-m,y=bb.y0-m,w=bb.x1-bb.x0+2*m,h=bb.y1-bb.y0+2*m;
+function exportSVGString(den,p=project){
+  const prims=buildDrawing(p,computeGeometry(p),{});const bb=primsBBox(prims);if(!bb)return null;
+  const m=Math.max(30,p.settings.textSize*2),x=bb.x0-m,y=bb.y0-m,w=bb.x1-bb.x0+2*m,h=bb.y1-bb.y0+2*m;
   const svgStr=`<svg xmlns="http://www.w3.org/2000/svg" width="${r2(w*10/den)}mm" height="${r2(h*10/den)}mm" viewBox="${r2(x)} ${r2(y)} ${r2(w)} ${r2(h)}"><style>${buildCSS('export',den)}</style><rect x="${r2(x)}" y="${r2(y)}" width="${r2(w)}" height="${r2(h)}" fill="#ffffff"/>${primsSVG(prims,false)}</svg>`;
   return {svg:svgStr,w,h};
 }
-function exportSVG(){const r=exportSVGString(50);if(!r)return alert('Le plan est vide.');download(slug()+'.svg',r.svg,'image/svg+xml');}
+function exportSVG(){const r=exportSVGString(50);if(!r)return alert('Le plan est vide.');download(fileBase()+'.svg',r.svg,'image/svg+xml');}
 function exportPNG(){
   const r=exportSVGString(50);if(!r)return alert('Le plan est vide.');
   const ppc=Math.min(4,4000/Math.max(r.w,r.h)),img=new Image();
-  img.onload=()=>{const c=document.createElement('canvas');c.width=Math.round(r.w*ppc);c.height=Math.round(r.h*ppc);const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);c.toBlob(b=>download(slug()+'.png',b));};
+  img.onload=()=>{const c=document.createElement('canvas');c.width=Math.round(r.w*ppc);c.height=Math.round(r.h*ppc);const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);c.toBlob(b=>download(fileBase()+'.png',b));};
   img.onerror=()=>alert('Échec de la conversion PNG.');
   img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(r.svg);
 }
 function printPlan(){
-  const S=project.settings,base=exportSVGString(50);if(!base)return alert('Le plan est vide.');
-  let [pw,ph]=S.paper==='A3'?[420,297]:[297,210];if(base.h>base.w)[pw,ph]=[ph,pw];
-  const aw=pw-20,ah=ph-20-16,need=Math.max(base.w*10/aw,base.h*10/ah);
+  const S=project.settings,multi=project.levels.length>1;
+  const lvls=multi&&S.printLevels==='all'?project.levels:[curLevel()];
+  const sheets=lvls.map(lv=>{const p=levelProject(project,lv);return {lv,p,base:exportSVGString(50,p)};}).filter(s=>s.base);
+  if(!sheets.length)return alert('Le plan est vide.');
+  const bw=Math.max(...sheets.map(s=>s.base.w)),bh=Math.max(...sheets.map(s=>s.base.h));
+  let [pw,ph]=S.paper==='A3'?[420,297]:[297,210];if(bh>bw)[pw,ph]=[ph,pw];
+  const aw=pw-20,ah=ph-20-16,need=Math.max(bw*10/aw,bh*10/ah);
   let den=S.printScale==='fit'?0:+S.printScale,note='';
   if(!den||den<need){const nice=[10,20,25,50,75,100,125,150,200,250,300,500,1000,2000];if(den)note=` (le 1:${den} ne tient pas en ${S.paper})`;den=nice.find(x=>x>=need)||Math.ceil(need);}
-  const {svg}=exportSVGString(den);
+  const pages=sheets.map(s=>`<div class="sheet"><div class="plan">${exportSVGString(den,s.p).svg}</div><div class="cart"><b>${esc(project.name)}${multi?' — '+esc(s.lv.name):''}</b><span>Échelle 1:${den}${esc(note)} — cotes en ${unitLabel()}</span><span>${new Date().toLocaleDateString('fr-FR')}</span></div></div>`).join('');
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(project.name)}</title><style>@page{size:${S.paper} ${pw>ph?'landscape':'portrait'};margin:10mm}
-html,body{margin:0;font-family:Helvetica,Arial,sans-serif;color:#000}.sheet{width:${aw}mm;height:${ph-20}mm;display:flex;flex-direction:column}
+html,body{margin:0;font-family:Helvetica,Arial,sans-serif;color:#000}.sheet{width:${aw}mm;height:${ph-20}mm;display:flex;flex-direction:column;page-break-after:always;break-after:page}.sheet:last-child{page-break-after:auto;break-after:auto}
 .plan{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden}.cart{height:12mm;border-top:.3mm solid #000;display:flex;justify-content:space-between;align-items:center;font-size:10pt;padding:0 2mm}
-@media screen{body{background:#777;padding:20px}.sheet{background:#fff;padding:10mm;box-sizing:content-box;margin:auto;box-shadow:0 2px 12px rgba(0,0,0,.5)}}</style></head>
-<body><div class="sheet"><div class="plan">${svg}</div><div class="cart"><b>${esc(project.name)}</b><span>Échelle 1:${den}${esc(note)} — cotes en ${unitLabel()}</span><span>${new Date().toLocaleDateString('fr-FR')}</span></div></div>
+@media screen{body{background:#777;padding:20px}.sheet{background:#fff;padding:10mm;box-sizing:content-box;margin:0 auto 20px;box-shadow:0 2px 12px rgba(0,0,0,.5)}}</style></head>
+<body>${pages}
 <script>setTimeout(function(){window.print()},400)<\/script></body></html>`;
   const win=window.open('','_blank');if(!win)return alert('Autorisez les fenêtres pop-up pour imprimer.');
   win.document.open();win.document.write(html);win.document.close();
@@ -1160,8 +1464,8 @@ html,body{margin:0;font-family:Helvetica,Arial,sans-serif;color:#000}.sheet{widt
 function exportDXF(){
   const S=project.settings,f=S.dxfUnits==='cm'?1:0.01;
   const prims=buildDrawing(project,computeGeometry(project),{});const bb=primsBBox(prims);if(!bb)return alert('Le plan est vide.');
-  const LAYERS={MURS:7,OUVERTURES:5,PORTES:3,RADIATEURS:1,COTES:8,TEXTES:2};
-  const layerOf={wall:'MURS',opening:'OUVERTURES',glass:'OUVERTURES',wleaf:'OUVERTURES',leaf:'PORTES',swing:'PORTES',radiator:'RADIATEURS',radfin:'RADIATEURS',dim:'COTES',dimext:'COTES',dimtick:'COTES',dimtext:'COTES',roomarea:'TEXTES',label:'TEXTES',optext:'TEXTES'};
+  const LAYERS={MURS:7,OUVERTURES:5,PORTES:3,RADIATEURS:1,COTES:8,TEXTES:2,MOBILIER:6,EQUIPEMENTS:4,ESCALIERS:30};
+  const layerOf={furn:'MOBILIER',furnthin:'MOBILIER',equip:'EQUIPEMENTS',equipthin:'EQUIPEMENTS',itemtext:'EQUIPEMENTS',stair:'ESCALIERS',stairthin:'ESCALIERS',stairarrow:'ESCALIERS',wall:'MURS',opening:'OUVERTURES',glass:'OUVERTURES',wleaf:'OUVERTURES',leaf:'PORTES',swing:'PORTES',radiator:'RADIATEURS',radfin:'RADIATEURS',dim:'COTES',dimext:'COTES',dimtick:'COTES',dimtext:'COTES',roomarea:'TEXTES',label:'TEXTES',optext:'TEXTES'};
   const X=v=>(v*f).toFixed(4),Y=v=>(-v*f).toFixed(4),deg=a=>{let d=a*180/Math.PI;d=((d%360)+360)%360;return d.toFixed(4);};
   const txt=s=>String(s).replace(/[^\x20-\x7e]/g,c=>'\\U+'+c.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0'));
   const o=[];const put=(...a)=>o.push(...a);
@@ -1173,20 +1477,23 @@ function exportDXF(){
   put('0','ENDTAB','0','ENDSEC','0','SECTION','2','ENTITIES');
   for(const q of prims){const L=layerOf[q.cls];if(!L)continue;
     if(q.k==='line')put('0','LINE','8',L,'10',X(q.a.x),'20',Y(q.a.y),'30','0.0','11',X(q.b.x),'21',Y(q.b.y),'31','0.0');
+    else if(q.k==='pline'){const n=q.pts.length;for(let i=0;i<n-(q.closed?0:1);i++){const a=q.pts[i],b=q.pts[(i+1)%n];
+      put('0','LINE','8',L,'10',X(a.x),'20',Y(a.y),'30','0.0','11',X(b.x),'21',Y(b.y),'31','0.0');}}
     else if(q.k==='arc')put('0','ARC','8',L,'10',X(q.c.x),'20',Y(q.c.y),'30','0.0','40',(q.r*f).toFixed(4),'50',deg(-q.a1),'51',deg(-q.a0));
     else if(q.k==='text')put('0','TEXT','8',L,'10',X(q.p.x),'20',Y(q.p.y),'30','0.0','40',(q.size*0.7*f).toFixed(4),'1',txt(q.s),'50',deg(-q.ang),'72','1','11',X(q.p.x),'21',Y(q.p.y),'31','0.0','73','2');
   }
   put('0','ENDSEC','0','EOF');
-  download(slug()+'.dxf',o.join('\r\n')+'\r\n','application/dxf');
+  download(fileBase()+'.dxf',o.join('\r\n')+'\r\n','application/dxf');
 }
 /* ================= initialisation ================= */
-const CMDS={new:newPlan,open:()=>$('#fileIn').click(),save:saveJSON,undo,redo,fit:fitView,svg:exportSVG,png:exportPNG,dxf:exportDXF,print:printPlan};
+const CMDS={items:()=>setShowItems(project.settings.showItems===false),new:newPlan,open:()=>$('#fileIn').click(),save:saveJSON,undo,redo,fit:fitView,svg:exportSVG,png:exportPNG,dxf:exportDXF,print:printPlan};
 document.querySelectorAll('header [data-cmd]').forEach(b=>b.addEventListener('click',()=>CMDS[b.dataset.cmd]()));
 $('#pname').addEventListener('change',e=>{const v=e.target.value.trim()||'Mon plan';change(()=>{project.name=v;});});
+$('#levelSel').addEventListener('change',e=>{const v=e.target.value;e.target.blur();if(v==='__add')addLevel(false);else switchLevel(v);});
 (function init(){
   const st=document.createElement('style');st.textContent=buildCSS('screen',50);document.head.appendChild(st);
   project=loadSaved()||newProject();
-  $('#pname').value=project.name;
+  $('#pname').value=project.name;updateLevelSel();updateItemsBtn();
   setTool('select');updatePanel();
   requestAnimationFrame(()=>{fitView();render();});
 })();
