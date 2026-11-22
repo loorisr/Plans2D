@@ -21,6 +21,9 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/
 #app{display:grid;grid-template-columns:58px 1fr 310px;grid-template-rows:auto 1fr 26px;height:100vh}
 header{grid-column:1/-1;display:flex;align-items:center;gap:4px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
 header .brand{font-weight:700;margin-right:6px}
+header .gh{margin-left:auto;display:flex;align-items:center;gap:5px;color:var(--muted);text-decoration:none;padding:4px 6px;border-radius:6px}
+header .gh:hover{color:var(--text);background:var(--hover)}
+header .gh svg{width:16px;height:16px;fill:currentColor}
 header .sep{width:1px;height:22px;background:var(--border);margin:0 6px}
 #pname{width:200px}
 button{font:inherit;color:inherit;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:4px 9px;cursor:pointer}
@@ -85,6 +88,7 @@ footer{grid-column:1/-1;display:flex;justify-content:space-between;align-items:c
   <button data-cmd="png">PNG</button>
   <button data-cmd="dxf">DXF</button>
   <button data-cmd="print">Imprimer / PDF</button>
+  <a class="gh" href="https://github.com/loorisr/Plans2D" target="_blank" rel="noopener" title="Code source sur GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
   <input type="file" id="fileIn" accept=".json,application/json" hidden>
 </header>
 <nav id="tools">
@@ -180,21 +184,29 @@ function computeGeometry(p){
     const L=V.dist(A,B);if(L<0.01)continue;
     const d=V.mul(V.sub(B,A),1/L);
     const g={w,A,B,d,n:V.perp(d),L,t:Math.max(0.5,+w.thickness||1)};
+    g.iL=Math.max(0,+w.insL||0);g.iR=Math.max(0,+w.insR||0);g.hL=g.t/2+g.iL;g.hR=g.t/2+g.iR;g.T=g.hL+g.hR;
+    g.h=sg=>sg>=0?g.hL:g.hR;
     walls.set(w.id,g);
     addAt(w.a,{g,end:'a',dir:d,ang:Math.atan2(d.y,d.x)});
     addAt(w.b,{g,end:'b',dir:V.mul(d,-1),ang:Math.atan2(-d.y,-d.x)});
   }
   for(const [nid,list] of at){
     const N=nodeMap.get(nid);list.sort((u,v)=>u.ang-v.ang);const n=list.length;
-    if(n===1){const e=list[0],q=V.perp(e.dir);e.plus=V.add(N,V.mul(q,e.g.t/2));e.minus=V.add(N,V.mul(q,-e.g.t/2));}
+    // faces finies (isolant compris) : demi-épaisseur côté « plus » (gauche de la direction sortante) et côté « moins »
+    const hP=e=>e.end==='a'?e.g.hL:e.g.hR,hM=e=>e.end==='a'?e.g.hR:e.g.hL;
+    if(n===1){const e=list[0],q=V.perp(e.dir),h=e.g.t/2;e.plus=V.add(N,V.mul(q,hP(e)));e.minus=V.add(N,V.mul(q,-hM(e)));
+      e.iplus=V.add(N,V.mul(q,h));e.iminus=V.add(N,V.mul(q,-h));}
     else for(let i=0;i<n;i++){
-      const ei=list[i],ej=list[(i+1)%n];
-      const p1=V.add(N,V.mul(V.perp(ei.dir),ei.g.t/2)),p2=V.add(N,V.mul(V.perp(ej.dir),-ej.g.t/2));
+      const ei=list[i],ej=list[(i+1)%n],lim=3*Math.max(ei.g.T,ej.g.T);
+      const p1=V.add(N,V.mul(V.perp(ei.dir),hP(ei))),p2=V.add(N,V.mul(V.perp(ej.dir),-hM(ej)));
       const X=lineIntersect(p1,ei.dir,p2,ej.dir);
-      if(X&&V.dist(X,N)<3*Math.max(ei.g.t,ej.g.t)){ei.plus=X;ej.minus=X;}
+      if(X&&V.dist(X,N)<lim){ei.plus=X;ej.minus=X;}
       else{ei.plus=p1;ej.minus=p2;if(V.dist(p1,p2)>0.05)steps.push([p1,p2]);}
+      const q1=V.add(N,V.mul(V.perp(ei.dir),ei.g.t/2)),q2=V.add(N,V.mul(V.perp(ej.dir),-ej.g.t/2));
+      const Y=lineIntersect(q1,ei.dir,q2,ej.dir);
+      if(Y&&V.dist(Y,N)<lim){ei.iplus=Y;ej.iminus=Y;}else{ei.iplus=q1;ej.iminus=q2;}
     }
-    for(const e of list){const g=e.g;if(e.end==='a'){g.lA=e.plus;g.rA=e.minus;g.degA=n;}else{g.rB=e.plus;g.lB=e.minus;g.degB=n;}}
+    for(const e of list){const g=e.g;if(e.end==='a'){g.lA=e.plus;g.rA=e.minus;g.ilA=e.iplus;g.irA=e.iminus;g.degA=n;}else{g.rB=e.plus;g.lB=e.minus;g.irB=e.iplus;g.ilB=e.iminus;g.degB=n;}}
   }
   for(const g of walls.values()){
     const s=Q=>V.dot(V.sub(Q,g.A),g.d);
@@ -227,9 +239,9 @@ function openingRange(g,o){
 }
 function openingSpan(g,o){const [a,b]=openingRange(g,o);const w=Math.min(o.width,Math.max(0,b-a));const s0=clamp(o.offset,a,b-w);return [s0,s0+w];}
 function openingHitPoly(g,o,tol){
-  const [s0,s1]=openingSpan(g,o),h=g.t/2;
-  if(o.type==='radiator'){const sg=o.side>=0?1:-1;const k0=sg*(h+2-tol),k1=sg*(h+2+(o.depth||10)+tol);return [P(g,s0-tol,k0),P(g,s1+tol,k0),P(g,s1+tol,k1),P(g,s0-tol,k1)];}
-  return [P(g,s0,-h-tol),P(g,s1,-h-tol),P(g,s1,h+tol),P(g,s0,h+tol)];
+  const [s0,s1]=openingSpan(g,o);
+  if(o.type==='radiator'){const sg=o.side>=0?1:-1,h=g.h(sg);const k0=sg*(h+2-tol),k1=sg*(h+2+(o.depth||10)+tol);return [P(g,s0-tol,k0),P(g,s1+tol,k0),P(g,s1+tol,k1),P(g,s0-tol,k1)];}
+  return [P(g,s0,-g.hR-tol),P(g,s1,-g.hR-tol),P(g,s1,g.hL+tol),P(g,s0,g.hL+tol)];
 }
 function faceName(f){if(!f||!f.room)return 'extérieur';const l=project.labels.find(l=>pointInPoly(l,f.axis));return l?l.text:'pièce '+fmtArea(f.area);}
 </script>
@@ -237,7 +249,7 @@ function faceName(f){if(!f||!f.room)return 'extérieur';const l=project.labels.f
 'use strict';
 /* ================= dessin -> primitives (communes SVG / DXF) ================= */
 const STYLE={
-  wallfill:{fill:'#c9ced6'}, omask:{fill:'#ffffff'},
+  wallfill:{fill:'#c9ced6'}, omask:{fill:'#ffffff'}, insfill:{fill:'#fdf3c4'}, insul:{stroke:'#a16207',w:0.1}, insline:{stroke:'#1b1f24',w:0.13},
   wall:{stroke:'#1b1f24',w:0.5}, opening:{stroke:'#1b1f24',w:0.18}, glass:{stroke:'#2563eb',w:0.18},
   leaf:{stroke:'#1b1f24',w:0.3}, wleaf:{stroke:'#1b1f24',w:0.13}, swing:{stroke:'#6b7280',w:0.13,dash:'2 1.5'},
   radfill:{fill:'#fde4e1'}, radiator:{stroke:'#c0392b',w:0.25}, radfin:{stroke:'#c0392b',w:0.1},
@@ -291,8 +303,25 @@ function sideLines(g,start,sr,cuts,out){
   for(const [c0,c1] of cuts){const nn=[];for(const [a,b] of segs){if(c1<=a||c0>=b){nn.push([a,b]);continue;}if(c0>a)nn.push([a,c0]);if(c1<b)nn.push([c1,b]);}segs=nn;}
   for(const [a,b] of segs)if(b-a>0.01)out.push({k:'line',a:onSide(start,sr[0],g.d,a),b:onSide(start,sr[0],g.d,b),cls:'wall'});
 }
+// isolation : bande remplie entre la face du mur et la ligne intérieure de l'isolant, avec un zigzag
+function insulPrims(g,side,cuts,out){
+  const L=side==='L',ins=L?g.iL:g.iR,sg=L?1:-1,h=g.h(sg);
+  const f0=L?g.lA:g.rA,f1=L?g.lB:g.rB,i0=L?g.ilA:g.irA,i1=L?g.ilB:g.irB;
+  out.push({k:'poly',pts:[f0,f1,i1,i0],cls:'insfill'});
+  const s=Q=>V.dot(V.sub(Q,g.A),g.d);
+  const a=Math.max(s(f0),s(i0)),b=Math.min(s(f1),s(i1));
+  let segs=[[a,b]];
+  for(const [c0,c1] of cuts){const nn=[];for(const [x,y] of segs){if(c1<=x||c0>=y){nn.push([x,y]);continue;}if(c0>x)nn.push([x,c0]);if(c1<y)nn.push([c1,y]);}segs=nn;}
+  const ki=sg*g.t/2,m=Math.min(ins*0.12,1),kA=sg*(h-m),kB=ki+sg*m,step=clamp(ins*0.6,1.5,8);
+  for(const [x,y] of segs){if(y-x<0.5)continue;
+    out.push({k:'line',a:P(g,x,ki),b:P(g,y,ki),cls:'insline'});
+    const n=Math.max(1,Math.round((y-x)/step)),pts=[];
+    for(let i=0;i<=n;i++)pts.push(P(g,x+(y-x)*i/n,i%2?kA:kB));
+    out.push({k:'pline',pts,cls:'insul'});
+  }
+}
 function leafPrims(g,o,s0,s1,sg,out,cls){
-  const h=sg*g.t/2,W=s1-s0;
+  const h=sg*g.h(sg),W=s1-s0;
   const list=o.leaves===2?[[s0,1,W/2],[s1,-1,W/2]]:[[o.hinge==='b'?s1:s0,o.hinge==='b'?-1:1,W]];
   for(const [hs,dS,r] of list){
     const H=P(g,hs,h),C=P(g,hs+dS*r,h),E=V.add(H,V.mul(g.n,sg*r));
@@ -302,11 +331,33 @@ function leafPrims(g,o,s0,s1,sg,out,cls){
     const a0=dl>0?aC:aE;out.push({k:'arc',c:H,r,a0,a1:a0+Math.abs(dl),cls:'swing'});
   }
 }
+// porte coulissante : en applique (vantail le long de la face, côté o.side) ou à galandage (vantail dans le mur)
+function slidePrims(g,o,s0,s1,sg,out){
+  const W=s1-s0,ov=Math.min(5,W*0.05),e=3.5;
+  const list=o.leaves===2?[[s0,(s0+s1)/2,-1],[(s0+s1)/2,s1,1]]:[[s0,s1,o.hinge==='b'?1:-1]];
+  for(const [a,b,dir] of list){
+    const w=b-a,sh=dir*w;
+    if(o.slide==='pocket'){
+      const box=(x,y,cls)=>{const p=[P(g,x,-e/2),P(g,y,-e/2),P(g,y,e/2),P(g,x,e/2)];for(let i=0;i<4;i++)out.push({k:'line',a:p[i],b:p[(i+1)%4],cls});};
+      box(a,b,'leaf');box(a+sh,b+sh,'swing');
+    }else{
+      const k0=sg*(g.h(sg)+1),k1=sg*(g.h(sg)+1+e);
+      const x0=dir>0?a-ov:a,x1=dir>0?b:b+ov;
+      const box=(x,y,cls)=>{const p=[P(g,x,k0),P(g,y,k0),P(g,y,k1),P(g,x,k1)];for(let i=0;i<4;i++)out.push({k:'line',a:p[i],b:p[(i+1)%4],cls});};
+      box(x0,x1,'leaf');box(x0+sh,x1+sh,'swing');
+    }
+    // flèche du sens d'ouverture
+    const ka=o.slide==='pocket'?sg*(g.h(sg)+6):sg*(g.h(sg)+e+8),m=(a+b)/2,L=Math.min(w*0.35,30),hd=Math.min(L*0.35,6);
+    const t=P(g,m+dir*L/2,ka);
+    out.push({k:'line',a:P(g,m-dir*L/2,ka),b:t,cls:'swing'});
+    for(const q of [1,-1])out.push({k:'line',a:t,b:P(g,m+dir*(L/2-hd),ka+q*hd*0.6),cls:'leaf'});
+  }
+}
 function openingPrims(g,o,out){
   const [s0,s1]=openingSpan(g,o);if(s1-s0<0.5)return;
-  const h=g.t/2,sg=o.side>=0?1:-1;
+  const sg=o.side>=0?1:-1,hL=g.hL,hR=g.hR;
   if(o.type==='radiator'){
-    const k0=sg*(h+2),k1=sg*(h+2+(o.depth||10));
+    const h=g.h(sg),k0=sg*(h+2),k1=sg*(h+2+(o.depth||10));
     const pts=[P(g,s0,k0),P(g,s1,k0),P(g,s1,k1),P(g,s0,k1)];
     out.push({k:'poly',pts,cls:'radfill'});
     for(let i=0;i<4;i++)out.push({k:'line',a:pts[i],b:pts[(i+1)%4],cls:'radiator'});
@@ -314,12 +365,12 @@ function openingPrims(g,o,out){
     for(let i=1;i<n;i++){const s=s0+(s1-s0)*i/n;out.push({k:'line',a:P(g,s,k0),b:P(g,s,k1),cls:'radfin'});}
     return;
   }
-  out.push({k:'line',a:P(g,s0,-h),b:P(g,s0,h),cls:'wall'},{k:'line',a:P(g,s1,-h),b:P(g,s1,h),cls:'wall'});
+  out.push({k:'line',a:P(g,s0,-hR),b:P(g,s0,hL),cls:'wall'},{k:'line',a:P(g,s1,-hR),b:P(g,s1,hL),cls:'wall'});
   if(o.type==='window'){
-    out.push({k:'line',a:P(g,s0,-h),b:P(g,s1,-h),cls:'opening'},{k:'line',a:P(g,s0,h),b:P(g,s1,h),cls:'opening'});
+    out.push({k:'line',a:P(g,s0,-hR),b:P(g,s1,-hR),cls:'opening'},{k:'line',a:P(g,s0,hL),b:P(g,s1,hL),cls:'opening'});
     out.push({k:'line',a:P(g,s0,-1.5),b:P(g,s1,-1.5),cls:'glass'},{k:'line',a:P(g,s0,1.5),b:P(g,s1,1.5),cls:'glass'});
     if(o.leaves>0)leafPrims(g,o,s0,s1,sg,out,'wleaf');
-  }else leafPrims(g,o,s0,s1,sg,out,'leaf');
+  }else if(o.slide)slidePrims(g,o,s0,s1,sg,out);else leafPrims(g,o,s0,s1,sg,out,'leaf');
 }
 function refPt(geo,pt,ref){
   if(ref&&ref.node&&!ref.wall){const n=geo.nodeMap.get(ref.node);if(n)return {x:n.x,y:n.y};}
@@ -331,7 +382,7 @@ function annotPrims(g,o,out,ts){
   if(o.type==='radiator')return;
   const [s0,s1]=openingSpan(g,o),sg=o.side>=0?1:-1,n=v=>String(r1(v)).replace('.',',');
   let txt=`${n(o.width)}×${n(o.height)}`;if(o.type==='window'&&o.sill!=null)txt+=` · all. ${n(o.sill)}`;
-  out.push({k:'text',p:P(g,(s0+s1)/2,-sg*(g.t/2+ts*0.9)),s:txt,size:ts*0.8,ang:readable(Math.atan2(g.d.y,g.d.x)),cls:'optext'});
+  out.push({k:'text',p:P(g,(s0+s1)/2,-sg*(g.h(-sg)+ts*0.9)),s:txt,size:ts*0.8,ang:readable(Math.atan2(g.d.y,g.d.x)),cls:'optext'});
 }
 function buildDrawing(p,geo,opt={}){
   const S=p.settings,ts=S.textSize,out=[];
@@ -340,7 +391,12 @@ function buildDrawing(p,geo,opt={}){
   for(const g of geo.walls.values())out.push({k:'poly',pts:g.poly,cls:'wallfill'});
   for(const g of geo.walls.values()){
     const cuts=cutsOf(g);
-    for(const [s0,s1] of cuts)out.push({k:'poly',pts:[P(g,s0,-g.t/2-0.3),P(g,s1,-g.t/2-0.3),P(g,s1,g.t/2+0.3),P(g,s0,g.t/2+0.3)],cls:'omask'});
+    if(g.iL>0.05)insulPrims(g,'L',cuts,out);
+    if(g.iR>0.05)insulPrims(g,'R',cuts,out);
+  }
+  for(const g of geo.walls.values()){
+    const cuts=cutsOf(g);
+    for(const [s0,s1] of cuts)out.push({k:'poly',pts:[P(g,s0,-g.hR-0.3),P(g,s1,-g.hR-0.3),P(g,s1,g.hL+0.3),P(g,s0,g.hL+0.3)],cls:'omask'});
     sideLines(g,g.lA,g.sL,cuts,out);sideLines(g,g.rA,g.sR,cuts,out);
     if(g.degA===1)out.push({k:'line',a:g.lA,b:g.rA,cls:'wall'});
     if(g.degB===1)out.push({k:'line',a:g.lB,b:g.rB,cls:'wall'});
@@ -364,7 +420,7 @@ function buildDrawing(p,geo,opt={}){
     const fl=geo.heFace.get(g.w.id+':L'),fr=geo.heFace.get(g.w.id+':R');
     if((fl&&fl.room)||(fr&&fr.room))continue;
     if(S.dimsOuter&&((fl&&fl.axisArea<-100)||(fr&&fr.axisArea<-100)))continue;
-    dimPrims(out,g.A,g.B,g.n,g.t/2+ts*0.8,fmtLen(g.L),'dim',{wall:g.w.id,side:'axis'},ts);
+    dimPrims(out,g.A,g.B,g.n,g.hL+ts*0.8,fmtLen(g.L),'dim',{wall:g.w.id,side:'axis'},ts);
   }
   // cotes de positionnement de l'ouverture sélectionnée
   if(opt.selOpening){const o=byId(p.openings,opt.selOpening);const g=o&&geo.walls.get(o.wallId);
@@ -558,7 +614,7 @@ function splitWallAt(p,w,X){
   const A=byId(p.nodes,w.a),B=byId(p.nodes,w.b),L=V.dist(A,B),d=V.norm(V.sub(B,A)),s=V.dot(V.sub(X,A),d);
   if(s<0.5)return w.a;if(s>L-0.5)return w.b;
   const ex=findNodeNear(p,X,0.5);const nid=ex?ex.id:addNode(p,V.add(A,V.mul(d,s)));
-  const w2={id:uid(),a:nid,b:w.b,thickness:w.thickness};w.b=nid;p.walls.push(w2);
+  const w2={id:uid(),a:nid,b:w.b,thickness:w.thickness};if(w.insL)w2.insL=w.insL;if(w.insR)w2.insR=w.insR;w.b=nid;p.walls.push(w2);
   for(const o of p.openings)if(o.wallId===w.id&&o.offset+o.width/2>s){o.wallId=w2.id;o.offset-=s;}
   return nid;
 }
@@ -626,10 +682,13 @@ function commitChain(p,pts,closed,refOverride){
 }
 function reverseWall(p,w){
   const L=V.dist(byId(p.nodes,w.a),byId(p.nodes,w.b));[w.a,w.b]=[w.b,w.a];
+  const iL=w.insL,iR=w.insR;delete w.insL;delete w.insR;if(iR)w.insL=iR;if(iL)w.insR=iL;
   for(const o of p.openings)if(o.wallId===w.id){o.offset=L-o.offset-o.width;o.side=-(o.side||1);o.hinge=o.hinge==='b'?'a':'b';}
 }
 function tryMerge(p,nid,w1,w2){
   if(Math.abs(w1.thickness-w2.thickness)>0.01)return;
+  const ins=(w,fwd)=>fwd?[w.insL||0,w.insR||0]:[w.insR||0,w.insL||0],i1=ins(w1,w1.b===nid),i2=ins(w2,w2.a===nid);
+  if(Math.abs(i1[0]-i2[0])>0.01||Math.abs(i1[1]-i2[1])>0.01)return;
   const N=byId(p.nodes,nid),o1=byId(p.nodes,w1.a===nid?w1.b:w1.a),o2=byId(p.nodes,w2.a===nid?w2.b:w2.a);
   if(V.dot(V.norm(V.sub(o1,N)),V.norm(V.sub(o2,N)))>-0.9999)return;
   if(w1.b!==nid)reverseWall(p,w1);if(w2.a!==nid)reverseWall(p,w2);
@@ -738,7 +797,7 @@ function addLevel(copyWalls){
   change(()=>{const p=project,i=levelIndex(),lv={id:uid(),name:'Étage '+p.levels.length};
     for(const k of LVL_KEYS)lv[k]=[];
     if(copyWalls){const map=new Map();lv.nodes=p.nodes.map(n=>{const id=uid();map.set(n.id,id);return {id,x:n.x,y:n.y};});
-      lv.walls=p.walls.map(w=>({id:uid(),a:map.get(w.a),b:map.get(w.b),thickness:w.thickness}));}
+      lv.walls=p.walls.map(w=>{const c={id:uid(),a:map.get(w.a),b:map.get(w.b),thickness:w.thickness};if(w.insL)c.insL=w.insL;if(w.insR)c.insR=w.insR;return c;});}
     p.levels.splice(i+1,0,lv);setLevel(p,lv.id);});
 }
 function deleteLevel(){
@@ -798,7 +857,7 @@ function renderOverlay(){
   const s=view.s,px=1/s,geo=getGeo(),AC='#2563eb';let h='';
   const st=w=>`stroke="${AC}" stroke-width="${w}" vector-effect="non-scaling-stroke"`;
   const tag=(p,t)=>`<text x="${r2(p.x)}" y="${r2(p.y)}" font-size="${12*px}" fill="${AC}" font-weight="700" text-anchor="middle" dy="0.35em" font-family="sans-serif">${t}</text>`;
-  const wallTags=g=>{const e=g.t/2+14*px;return tag(V.sub(g.A,V.mul(g.d,e)),'A')+tag(V.add(g.B,V.mul(g.d,e)),'B')
+  const wallTags=g=>{const e=Math.max(g.hL,g.hR)+14*px;return tag(V.sub(g.A,V.mul(g.d,e)),'A')+tag(V.add(g.B,V.mul(g.d,e)),'B')
     +tag(V.add(V.mul(V.add(g.A,g.B),0.5),V.mul(g.n,e)),'1')+tag(V.sub(V.mul(V.add(g.A,g.B),0.5),V.mul(g.n,e)),'2');};
   const item=(it,strong)=>{
     if(!it)return '';const fill=strong?'rgba(37,99,235,.18)':'rgba(37,99,235,.08)';
@@ -889,7 +948,7 @@ function wallUnder(w,tol){
   const geo=getGeo();let best=null,bd=Infinity;
   for(const g of geo.walls.values()){
     const s=V.dot(V.sub(w,g.A),g.d);if(s<-tol||s>g.L+tol)continue;
-    const k=V.dot(V.sub(w,g.A),g.n),ex=Math.abs(k)-g.t/2;if(ex>tol)continue;
+    const k=V.dot(V.sub(w,g.A),g.n),ex=k>=0?k-g.hL:-k-g.hR;if(ex>tol)continue;
     const dd=Math.max(ex,0)+(s<0?-s:s>g.L?s-g.L:0);if(dd<bd){bd=dd;best={g,s,k};}
   }
   return best;
@@ -928,13 +987,13 @@ function snapItem(it,c,free){
   if(!free&&K&&K.wall&&S.snapObjects){
     let best=null;
     for(const g of getGeo().walls.values())for(const sg of [1,-1]){
-      const k=V.dot(V.sub(c,g.A),g.n)*sg-g.t/2;if(k<-g.t/2||k>it.d+30)continue;
+      const k=V.dot(V.sub(c,g.A),g.n)*sg-g.h(sg);if(k<-g.h(sg)||k>it.d+30)continue;
       const s=V.dot(V.sub(c,g.A),g.d),sr=sg>0?g.sL:g.sR;if(s<sr[0]-10||s>sr[1]+10)continue;
       const score=Math.abs(k-it.d/2);if(!best||score<best.score)best={g,sg,s,sr,score};
     }
     if(best){const {g,sg,sr}=best,hw=it.w/2;let s=best.s;
       if(Math.abs(s-hw-sr[0])<15)s=sr[0]+hw;else if(Math.abs(sr[1]-s-hw)<15)s=sr[1]-hw;else if(S.snapGrid)s=Math.round(s/S.grid)*S.grid;
-      const nrm=V.mul(g.n,sg),pos=V.add(V.add(g.A,V.mul(g.d,s)),V.mul(nrm,g.t/2+it.d/2));
+      const nrm=V.mul(g.n,sg),pos=V.add(V.add(g.A,V.mul(g.d,s)),V.mul(nrm,g.h(sg)+it.d/2));
       const rot=Math.round(Math.atan2(-nrm.x,nrm.y)*180/Math.PI);
       return {x:r1(pos.x),y:r1(pos.y),rot:((rot%360)+360)%360};}
   }
@@ -1252,7 +1311,12 @@ function wallHTML(w){
   const geo=getGeo(),g=geo.walls.get(w.id);if(!g)return '<p class="hint">Mur de longueur nulle.</p>';
   const fl=geo.heFace.get(w.id+':L'),fr=geo.heFace.get(w.id+':R');
   const ops=project.openings.filter(o=>o.wallId===w.id);
+  const insRow=(sd,f)=>{const v=sd==='L'?(w.insL||0):(w.insR||0);
+    return row(`Côté ${sd==='L'?1:2} · ${esc(faceName(f))}`,inp('w.ins'+sd,v))+`<div class="chips">${[0,6,10,14,20].map(t=>`<button data-act="ins" data-side="${sd}" data-v="${t}" class="${t==v?'on':''}">${t||'Aucune'}</button>`).join('')}</div>`
+      +(f&&f.hes.length>1?`<div class="chips"><button data-act="insFace" data-side="${sd}">Appliquer à tout le contour ${f.room?'de la pièce':'extérieur'}</button></div>`:'');};
   return `<h2>Mur</h2>${row('Épaisseur',inp('w.thickness',w.thickness))}${thickChips('thick',w.thickness)}
+  <h3>Isolation</h3>${insRow('L',fl)}${insRow('R',fr)}
+  <p class="hint">L'isolant s'ajoute à l'épaisseur du mur, sur la face choisie (doublage intérieur ou isolation par l'extérieur). Tapez n'importe quelle valeur ; 0 = sans isolation.${g.iL||g.iR?` Épaisseur totale : <b>${fnum(g.T)} cm</b>.`:''}</p>
   <h3>Longueurs</h3>${row('Axe',inp('w.length',g.L))}
   ${row(`Côté 1 · ${esc(faceName(fl))}`,inp('w.sideL',g.sL[1]-g.sL[0]))}${row(`Côté 2 · ${esc(faceName(fr))}`,inp('w.sideR',g.sR[1]-g.sR[0]))}
   ${row('Extrémité déplacée',selBox('ui.anchor',T.anchor,[['auto',`Auto (${autoEnd(g).toUpperCase()})`],['a','A'],['b','B']]))}
@@ -1270,10 +1334,10 @@ function openingHTML(o){
   let h=`<h2>${TYPE_NAMES[o.type]}</h2>${row('Type',selBox('o.type',o.type,[['window','Fenêtre'],['door','Porte'],['radiator','Radiateur']]))}
   ${row('Largeur',inp('o.width',o.width))}${row('Hauteur',inp('o.height',o.height))}`;
   if(o.type==='window')h+=row('Allège',inp('o.sill',o.sill))+row('Vantaux',selBox('o.leaves',o.leaves,[['0','Fixe / coulissant'],['1','1 vantail'],['2','2 vantaux']]));
-  if(o.type==='door')h+=row('Vantaux',selBox('o.leaves',o.leaves,[['1','1 vantail'],['2','2 vantaux']]));
+  if(o.type==='door')h+=row('Ouverture',selBox('o.slide',o.slide||'',[['','Battante'],['surface','Coulissante en applique'],['pocket','Coulissante à galandage']]))+row('Vantaux',selBox('o.leaves',o.leaves,[['1','1 vantail'],['2','2 vantaux']]));
   if(o.type==='radiator')h+=row('Épaisseur',inp('o.depth',o.depth));
-  h+=`<div class="row"><label>${o.type==='radiator'?'Placé':'Ouvre'} vers : ${esc(sideName)}</label><button data-act="flip" data-v="side">Inverser (X)</button></div>`;
-  if(o.type!=='radiator'&&o.leaves===1)h+=`<div class="row"><label>Charnière côté ${o.hinge==='b'?'B':'A'}</label><button data-act="flip" data-v="hinge">Inverser (H)</button></div>`;
+  h+=`<div class="row"><label>${o.type==='radiator'?'Placé vers':o.slide==='surface'?'Rail côté':o.slide==='pocket'?'Flèche côté':'Ouvre vers'} : ${esc(sideName)}</label><button data-act="flip" data-v="side">Inverser (X)</button></div>`;
+  if(o.type!=='radiator'&&o.leaves===1)h+=`<div class="row"><label>${o.slide?'Coulisse vers':'Charnière côté'} ${o.hinge==='b'?'B':'A'}</label><button data-act="flip" data-v="hinge">Inverser (H)</button></div>`;
   h+=`<h3>Position</h3>${row('Depuis A (axe)',inp('o.offset',s0))}`;
   const sides=o.type==='radiator'?[o.side>=0?'L':'R']:['L','R'];
   for(const sd of sides){const sr=sd==='L'?g.sL:g.sR,f=sd==='L'?fl:fr;
@@ -1364,13 +1428,16 @@ function onField(el){
   if(scope==='w'){const w=byId(project.walls,sel.id);if(!w)return;
     if(!isFinite(num))return bad();
     if(key==='thickness'){if(num>0)change(()=>{w.thickness=num;});else bad();}
+    else if(key==='insL'||key==='insR'){const other=key==='insL'?(w.insR||0):(w.insL||0);
+      if(num>=0)change(()=>{if(num)w[key]=r1(num);else delete w[key];});else bad();}
     else if(key==='length'){if(num>0)change(()=>setSideLength(w.id,'axis',num,T.anchor));}
     else if(key==='sideL'||key==='sideR'){if(num>0)change(()=>setSideLength(w.id,key==='sideL'?'L':'R',num,T.anchor));}
     else if(key==='shift'){if(num)change(()=>shiftWall(project,w.id,num));}
     return;}
   if(scope==='n'){const n=byId(project.nodes,sel.id);if(!n||!isFinite(num))return bad();change(()=>{n[key]=num;});return;}
   if(scope==='o'){const o=byId(project.openings,sel.id);if(!o)return;const g=getGeo().walls.get(o.wallId);
-    if(key==='type'){change(()=>{o.type=raw;const d=project.settings[raw];o.leaves=d.leaves||0;o.width=d.width;o.height=d.height;if(raw==='radiator')o.depth=d.depth;if(raw==='window')o.sill=d.sill;});return;}
+    if(key==='slide'){change(()=>{if(raw)o.slide=raw;else delete o.slide;});return;}
+    if(key==='type'){change(()=>{o.type=raw;if(raw!=='door')delete o.slide;const d=project.settings[raw];o.leaves=d.leaves||0;o.width=d.width;o.height=d.height;if(raw==='radiator')o.depth=d.depth;if(raw==='window')o.sill=d.sill;});return;}
     if(!isFinite(num))return bad();
     const set=off=>change(()=>{o.offset=r1(off);});
     if(key==='dL0')set(g.sL[0]+num);else if(key==='dL1')set(g.sL[1]-num-o.width);
@@ -1401,6 +1468,10 @@ function onAct(b){
     return;}
   if(sel.type==='wall'){const w=byId(project.walls,sel.id);if(!w)return;
     if(a==='thick')change(()=>{w.thickness=+v;});
+    else if(a==='ins'||a==='insFace'){const sd=b.dataset.side,val=a==='ins'?+v:(sd==='L'?(w.insL||0):(w.insR||0));
+      const targets=[[w,sd]];
+      if(a==='insFace'){const f=getGeo().heFace.get(w.id+':'+sd);if(f){targets.length=0;for(const h of f.hes)targets.push([h.g.w,h.dir==='ab'?'L':'R']);}}
+      change(()=>{for(const [ww,s2] of targets){const k='ins'+s2;if(val)ww[k]=val;else delete ww[k];}});}
     else if(a==='reverse')change(()=>reverseWall(project,w));
     else if(a==='addOp'){const geo=getGeo(),g=geo.walls.get(w.id);if(!g)return;
       const fl=geo.heFace.get(w.id+':L');const def=clone(project.settings[v]);
@@ -1464,8 +1535,8 @@ html,body{margin:0;font-family:Helvetica,Arial,sans-serif;color:#000}.sheet{widt
 function exportDXF(){
   const S=project.settings,f=S.dxfUnits==='cm'?1:0.01;
   const prims=buildDrawing(project,computeGeometry(project),{});const bb=primsBBox(prims);if(!bb)return alert('Le plan est vide.');
-  const LAYERS={MURS:7,OUVERTURES:5,PORTES:3,RADIATEURS:1,COTES:8,TEXTES:2,MOBILIER:6,EQUIPEMENTS:4,ESCALIERS:30};
-  const layerOf={furn:'MOBILIER',furnthin:'MOBILIER',equip:'EQUIPEMENTS',equipthin:'EQUIPEMENTS',itemtext:'EQUIPEMENTS',stair:'ESCALIERS',stairthin:'ESCALIERS',stairarrow:'ESCALIERS',wall:'MURS',opening:'OUVERTURES',glass:'OUVERTURES',wleaf:'OUVERTURES',leaf:'PORTES',swing:'PORTES',radiator:'RADIATEURS',radfin:'RADIATEURS',dim:'COTES',dimext:'COTES',dimtick:'COTES',dimtext:'COTES',roomarea:'TEXTES',label:'TEXTES',optext:'TEXTES'};
+  const LAYERS={MURS:7,ISOLATION:40,OUVERTURES:5,PORTES:3,RADIATEURS:1,COTES:8,TEXTES:2,MOBILIER:6,EQUIPEMENTS:4,ESCALIERS:30};
+  const layerOf={furn:'MOBILIER',furnthin:'MOBILIER',equip:'EQUIPEMENTS',equipthin:'EQUIPEMENTS',itemtext:'EQUIPEMENTS',stair:'ESCALIERS',stairthin:'ESCALIERS',stairarrow:'ESCALIERS',wall:'MURS',insline:'ISOLATION',insul:'ISOLATION',opening:'OUVERTURES',glass:'OUVERTURES',wleaf:'OUVERTURES',leaf:'PORTES',swing:'PORTES',radiator:'RADIATEURS',radfin:'RADIATEURS',dim:'COTES',dimext:'COTES',dimtick:'COTES',dimtext:'COTES',roomarea:'TEXTES',label:'TEXTES',optext:'TEXTES'};
   const X=v=>(v*f).toFixed(4),Y=v=>(-v*f).toFixed(4),deg=a=>{let d=a*180/Math.PI;d=((d%360)+360)%360;return d.toFixed(4);};
   const txt=s=>String(s).replace(/[^\x20-\x7e]/g,c=>'\\U+'+c.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0'));
   const o=[];const put=(...a)=>o.push(...a);

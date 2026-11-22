@@ -20,7 +20,8 @@ Vous pouvez aussi le servir en local avec `python3 -m http.server`.
 ## Fonctionnalités
 
 - **Murs** : tracé point par point avec saisie de la longueur au clavier (`420`, ou `420<30` pour donner un angle), fermeture d'une pièce en recliquant le premier point. La ligne de tracé peut être la face intérieure, l'axe ou la face extérieure, et l'épaisseur se règle.
-- **Ouvertures** : fenêtres (largeur, hauteur, allège), portes (sens d'ouverture, charnière) et radiateurs, placés sur les murs.
+- **Isolation** : sur chaque face d'un mur (doublage intérieur ou isolation par l'extérieur), d'épaisseur libre, ajoutée à l'épaisseur du mur et dessinée en hachures. Un bouton l'applique à tout le contour d'une pièce ou à tout le contour extérieur. Elle est exportée sur un calque `ISOLATION` dans le DXF.
+- **Ouvertures** : fenêtres (largeur, hauteur, allège), portes battantes (sens d'ouverture, charnière) ou coulissantes (en applique ou à galandage) et radiateurs, placés sur les murs.
 - **Mobilier et équipements** : lits, canapé, fauteuil, tables (avec ou sans chaises), bureau, armoire, commode, meuble TV, WC, lavabo, vasques, douche, baignoire, plan de travail, évier, plaque de cuisson, électroménager, chauffe-eau. Près d'un mur, un objet s'y adosse automatiquement et se cale dans les angles. On peut le redimensionner, le faire pivoter et le retourner. Le bouton **Mobilier visible / caché** (`Maj+M`) le masque à l'écran et dans les exports, sans masquer les escaliers.
 - **Escaliers** : droit, quart tournant et hélicoïdal, avec le nombre de marches et le sens de montée. Le panneau calcule la hauteur de marche, le giron et la formule de Blondel (2h+g).
 - **Plusieurs niveaux** : rez-de-chaussée, étages, sous-sol, choisis dans la liste en haut. Un nouveau niveau peut reprendre les murs du niveau affiché. Le niveau inférieur s'affiche en transparence pour aligner les murs et les escaliers. On peut imprimer tous les niveaux, à raison d'une page chacun.
@@ -28,7 +29,7 @@ Vous pouvez aussi le servir en local avec `python3 -m http.server`.
 - **Pièces** : textes et noms de pièces, calcul automatique des surfaces.
 - **Accroches** : grille, angles à 45°/90°, accroche aux nœuds, aux angles, aux faces et aux alignements.
 - **Édition** : sélection, déplacement, copier/coller/dupliquer (y compris d'un niveau à l'autre), décalage au clavier, annuler/rétablir.
-- **Export** : SVG, PNG, DXF (calques séparés pour murs, ouvertures, mobilier, équipements, escaliers et cotes) et impression/PDF à l'échelle 1:50 ou 1:100, ou ajustée à la page (A4 ou A3).
+- **Export** : SVG, PNG, DXF (calques séparés pour murs, isolation, ouvertures, mobilier, équipements, escaliers et cotes) et impression/PDF à l'échelle 1:50 ou 1:100, ou ajustée à la page (A4 ou A3).
 - **Sauvegarde** : enregistrement automatique dans le `localStorage` du navigateur, et export/import au format `.json`.
 - Thème clair ou sombre selon le système, mise en page adaptée aux petits écrans.
 
