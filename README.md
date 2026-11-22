@@ -30,6 +30,7 @@ Vous pouvez aussi le servir en local avec `python3 -m http.server`.
 - **Accroches** : grille, angles à 45°/90°, accroche aux nœuds, aux angles, aux faces et aux alignements.
 - **Édition** : sélection, déplacement, copier/coller/dupliquer (y compris d'un niveau à l'autre), décalage au clavier, annuler/rétablir.
 - **Export** : SVG, PNG, DXF (calques séparés pour murs, isolation, ouvertures, mobilier, équipements, escaliers et cotes) et impression/PDF à l'échelle 1:50 ou 1:100, ou ajustée à la page (A4 ou A3).
+- **Partage** : le bouton **Partager** copie un lien qui contient tout le plan (compressé dans l'adresse, rien n'est envoyé à un serveur). Ouvrir ce lien charge le plan, et `Ctrl+Z` rend le plan précédent.
 - **Sauvegarde** : enregistrement automatique dans le `localStorage` du navigateur, et export/import au format `.json`.
 - Thème clair ou sombre selon le système, mise en page adaptée aux petits écrans.
 

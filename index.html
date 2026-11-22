@@ -78,6 +78,7 @@ footer{grid-column:1/-1;display:flex;justify-content:space-between;align-items:c
   <button data-cmd="new" title="Nouveau plan">Nouveau</button>
   <button data-cmd="open" title="Ouvrir un fichier .json (Ctrl+O)">Ouvrir…</button>
   <button data-cmd="save" title="Enregistrer en .json (Ctrl+S)">Enregistrer</button>
+  <button data-cmd="share" id="shareBtn" title="Copier un lien qui contient tout le plan">Partager</button>
   <span class="sep"></span>
   <button data-cmd="undo" title="Annuler (Ctrl+Z)">↶</button>
   <button data-cmd="redo" title="Rétablir (Ctrl+Y)">↷</button>
@@ -1503,6 +1504,38 @@ function slug(s=project.name){return (s||'plan').normalize('NFD').replace(/[̀-�
 function fileBase(){return slug()+(project.levels.length>1?'-'+slug(curLevel().name):'');}
 function download(name,data,mime){const blob=data instanceof Blob?data:new Blob([data],{type:mime});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
 function saveJSON(){download(slug()+'.json',JSON.stringify(project,null,1),'application/json');}
+/* ---- partage par lien : le plan est compressé dans le fragment #plan=… ---- */
+async function encodePlan(p){
+  const bytes=new Uint8Array(await new Response(new Blob([JSON.stringify(p)]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+  let bin='';for(let i=0;i<bytes.length;i+=0x8000)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function decodePlan(str){
+  const b64=str.replace(/-/g,'+').replace(/_/g,'/'),bin=atob(b64+'==='.slice((b64.length+3)%4));
+  const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
+  const obj=JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text());
+  if(!obj||!Array.isArray(obj.walls||obj.levels))throw new Error('format');
+  return obj;
+}
+async function sharePlan(){
+  if(typeof CompressionStream==='undefined')return alert('Votre navigateur ne permet pas de créer un lien de partage.');
+  const url=location.origin+location.pathname+'#plan='+await encodePlan(project),b=$('#shareBtn');
+  let ok=false;try{await navigator.clipboard.writeText(url);ok=true;}catch(e){}
+  if(!ok){prompt('Copiez ce lien :',url);return;}
+  b.textContent='Lien copié ✓';b.classList.add('on');clearTimeout(b._t);
+  b._t=setTimeout(()=>{b.textContent='Partager';b.classList.remove('on');},2000);
+  if(url.length>32000)alert(`Le lien est copié, mais il est long (${Math.round(url.length/1000)} 000 caractères) : certaines messageries risquent de le couper. Dans ce cas, envoyez plutôt le fichier .json.`);
+}
+function planIsEmpty(p=project){return p.levels.every(lv=>{const q=levelProject(p,lv);return !q.walls.length&&!q.items.length&&!q.labels.length&&!q.dims.length;});}
+async function loadFromHash(){
+  if(!location.hash.startsWith('#plan='))return;
+  const str=location.hash.slice(6);
+  history.replaceState(null,'',location.pathname+location.search);
+  let obj;try{obj=await decodePlan(str);}catch(err){return alert('Lien de partage invalide ou incomplet.');}
+  if(!planIsEmpty()&&!confirm('Ouvrir le plan partagé ? Le plan actuel sera remplacé (annulable avec Ctrl+Z).'))return;
+  pushHistory();project=normalizeProject(obj);sel=null;afterChange();fitView();
+}
+window.addEventListener('hashchange',loadFromHash);
 function newPlan(){if(!confirm('Effacer le plan actuel ? (annulable avec Ctrl+Z)'))return;pushHistory();const S=project.settings;project=newProject();project.settings=S;sel=null;afterChange();fitView();}
 $('#fileIn').addEventListener('change',e=>{
   const f=e.target.files[0];if(!f)return;const rd=new FileReader();
@@ -1569,7 +1602,7 @@ function exportDXF(){
   download(fileBase()+'.dxf',o.join('\r\n')+'\r\n','application/dxf');
 }
 /* ================= initialisation ================= */
-const CMDS={items:()=>setShowItems(project.settings.showItems===false),new:newPlan,open:()=>$('#fileIn').click(),save:saveJSON,undo,redo,fit:fitView,svg:exportSVG,png:exportPNG,dxf:exportDXF,print:printPlan};
+const CMDS={items:()=>setShowItems(project.settings.showItems===false),new:newPlan,open:()=>$('#fileIn').click(),save:saveJSON,share:sharePlan,undo,redo,fit:fitView,svg:exportSVG,png:exportPNG,dxf:exportDXF,print:printPlan};
 document.querySelectorAll('header [data-cmd]').forEach(b=>b.addEventListener('click',()=>CMDS[b.dataset.cmd]()));
 $('#pname').addEventListener('change',e=>{const v=e.target.value.trim()||'Mon plan';change(()=>{project.name=v;});});
 $('#levelSel').addEventListener('change',e=>{const v=e.target.value;e.target.blur();if(v==='__add')addLevel(false);else switchLevel(v);});
@@ -1578,7 +1611,7 @@ $('#levelSel').addEventListener('change',e=>{const v=e.target.value;e.target.blu
   project=loadSaved()||newProject();
   $('#pname').value=project.name;updateLevelSel();updateItemsBtn();
   setTool('select');updatePanel();
-  requestAnimationFrame(()=>{fitView();render();});
+  requestAnimationFrame(()=>{fitView();render();loadFromHash();});
 })();
 </script>
 </body>
