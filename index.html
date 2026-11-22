@@ -331,6 +331,16 @@ function leafPrims(g,o,s0,s1,sg,out,cls){
     const a0=dl>0?aC:aE;out.push({k:'arc',c:H,r,a0,a1:a0+Math.abs(dl),cls:'swing'});
   }
 }
+// place libre le long du mur pour ouvrir une porte coulissante (vers A ou B), autres ouvertures déduites
+function slideRoom(g,o,ops){
+  const [s0,s1]=openingSpan(g,o),[a,b]=openingRange(g,o);
+  const need=o.leaves===2?[(s1-s0)/2,(s1-s0)/2]:o.hinge==='b'?[0,s1-s0]:[s1-s0,0];
+  let lo=a,hi=b;
+  for(const x of ops){if(x===o||x.type==='radiator'&&o.slide==='pocket')continue;
+    if(x.type==='radiator'&&(x.side>=0)!==(o.side>=0))continue;
+    const [x0,x1]=openingSpan(g,x);if(x1<=s0)lo=Math.max(lo,x1);else if(x0>=s1)hi=Math.min(hi,x0);}
+  return {missA:Math.max(0,need[0]-(s0-lo)),missB:Math.max(0,need[1]-(hi-s1))};
+}
 // porte coulissante : en applique (vantail le long de la face, côté o.side) ou à galandage (vantail dans le mur)
 function slidePrims(g,o,s0,s1,sg,out){
   const W=s1-s0,ov=Math.min(5,W*0.05),e=3.5;
@@ -1337,6 +1347,8 @@ function openingHTML(o){
   if(o.type==='door')h+=row('Ouverture',selBox('o.slide',o.slide||'',[['','Battante'],['surface','Coulissante en applique'],['pocket','Coulissante à galandage']]))+row('Vantaux',selBox('o.leaves',o.leaves,[['1','1 vantail'],['2','2 vantaux']]));
   if(o.type==='radiator')h+=row('Épaisseur',inp('o.depth',o.depth));
   h+=`<div class="row"><label>${o.type==='radiator'?'Placé vers':o.slide==='surface'?'Rail côté':o.slide==='pocket'?'Flèche côté':'Ouvre vers'} : ${esc(sideName)}</label><button data-act="flip" data-v="side">Inverser (X)</button></div>`;
+  if(o.slide){const r=slideRoom(g,o,project.openings.filter(x=>x.wallId===o.wallId)),m=r.missA+r.missB;
+    if(m>0.5)h+=`<p class="hint" style="color:var(--danger)">Pas assez de place le long du mur pour ouvrir la porte : il manque ${fnum(m)} cm${r.missA&&r.missB?'':r.missA?' côté A':' côté B'}.</p>`;}
   if(o.type!=='radiator'&&o.leaves===1)h+=`<div class="row"><label>${o.slide?'Coulisse vers':'Charnière côté'} ${o.hinge==='b'?'B':'A'}</label><button data-act="flip" data-v="hinge">Inverser (H)</button></div>`;
   h+=`<h3>Position</h3>${row('Depuis A (axe)',inp('o.offset',s0))}`;
   const sides=o.type==='radiator'?[o.side>=0?'L':'R']:['L','R'];
